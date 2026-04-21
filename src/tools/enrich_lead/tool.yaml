@@ -1,0 +1,16 @@
+name:        enrich_lead
+version:     "1.0"
+type:        python
+description: "Enrich a CRM lead record with company data."
+
+input_schema:  request.proto
+output_schema: response.proto
+
+config:
+  env_vars:
+    CLEARBIT_KEY: "{{env:CLEARBIT_API_KEY}}"
+  async_mode: true
+
+execution:
+  retries: 1
+  timeout: 15

@@ -1,0 +1,11 @@
+syntax = "proto3";
+package agent_tools;
+import "auth_config.proto";
+
+message MCPToolConfig {
+  string endpoint                   = 1;
+  string tool_name                  = 2;
+  AuthConfig auth                   = 3;
+  map<string, string> metadata      = 4;
+  int32  timeout_seconds            = 5;
+}

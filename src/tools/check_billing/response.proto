@@ -1,0 +1,17 @@
+syntax = "proto3";
+package check_billing;
+
+message CheckBillingResponse {
+  string   customer_id  = 1;
+  double   total_amount = 2;
+  string   currency     = 3;
+  string   status       = 4;
+  string   period       = 5;
+  repeated LineItem line_items = 6;
+}
+
+message LineItem {
+  string description = 1;
+  double amount      = 2;
+  string code        = 3;
+}

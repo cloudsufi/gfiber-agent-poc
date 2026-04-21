@@ -1,0 +1,8 @@
+# Runtime deps for the demo agent.
+# Install the framework from this repo (editable):
+#   pip install -e ..
+# or from GitHub once published:
+#   pip install git+https://github.com/cloudsufi/ai-agent-shared-tools@main
+
+ai-agent-shared-tools
+google-adk>=0.1.0        # optional — only needed for the --adk section of demo.py

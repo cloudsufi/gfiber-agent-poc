@@ -1,0 +1,10 @@
+syntax = "proto3";
+package enrich_lead;
+
+message EnrichLeadResponse {
+  string email        = 1;
+  string company_name = 2;
+  string industry     = 3;
+  string location     = 4;
+  int32  employees    = 5;
+}
