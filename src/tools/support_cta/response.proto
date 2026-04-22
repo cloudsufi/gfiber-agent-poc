@@ -1,0 +1,11 @@
+syntax = "proto3";
+package support_cta;
+
+message SupportCtaResponse {
+  string              session_id     = 1;
+  string              language_code  = 2;
+  string              agent_response = 3;   // fulfillment text from CX
+  string              intent         = 4;
+  double              confidence     = 5;
+  map<string, string> parameters     = 6;
+}

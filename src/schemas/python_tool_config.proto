@@ -1,8 +1,0 @@
-syntax = "proto3";
-package agent_tools;
-
-message PythonToolConfig {
-  map<string, string> env_vars    = 1;
-  map<string, string> parameters  = 2;
-  bool async_mode                 = 3;
-}

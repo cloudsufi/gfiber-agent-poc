@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck check clean build
+.PHONY: install test test-cov lint format typecheck check clean build demo demo-adk verify
 
 install:
 	pip install -e ".[dev]"
@@ -8,6 +8,19 @@ test:
 
 test-cov:
 	pytest tests/ --cov=agent_tools --cov-report=html --cov-report=term-missing
+
+# ── Smoke-test the framework end-to-end via the sample agent ──────────────
+# Exercises all four primary tool types (api, mcp, function, cta) and the
+# dynamic-header paths. ``demo-adk`` additionally builds the google-adk
+# LlmAgent over every registered tool (requires ``pip install google-adk``).
+demo:
+	python test_agent/demo.py
+
+demo-adk:
+	python test_agent/demo.py --adk
+
+# Full validation — unit tests + runnable demo. Use this before pushing.
+verify: test demo
 
 lint:
 	ruff check agent_tools tests

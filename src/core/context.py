@@ -3,8 +3,20 @@ Request-scoped context — carries per-call HTTP header overrides from agent
 code into tool execution.
 
 Headers registered here are merged into the outgoing request by
-:class:`agent_tools.handlers.api_handler.APIHandler`, taking precedence over
-static ``headers:`` values in ``tool.yaml`` and over auth-injected headers.
+:class:`agent_tools.handlers.api_handler.APIHandler`, but **only** for
+header names that the tool declared on its yaml ``runtime_headers`` allow
+list. Anything the agent passes that isn't on the list is silently dropped
+before the HTTP call. This keeps agent code from accidentally (or
+maliciously) overriding headers a tool didn't design for — including auth.
+
+Implementation
+--------------
+The mechanism is a ``contextvars.ContextVar[dict]``. ``ContextVar`` is
+coroutine- and thread-safe: each ``asyncio.Task`` gets its own copy of the
+value, so concurrent calls don't leak headers between each other.
+:func:`with_request_headers` uses the ``set`` / ``reset`` token pattern so
+nested blocks stack (inner entries override outer ones while the block is
+active; outer entries are restored afterwards).
 
 Usage
 -----

@@ -1,0 +1,10 @@
+syntax = "proto3";
+package score_function;
+
+message ScoreFunctionResponse {
+  string email         = 1;
+  double score         = 2;
+  string tier          = 3;
+  string model_version = 4;
+  bool   above_threshold = 5;
+}

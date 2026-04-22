@@ -57,26 +57,26 @@ def sample_api_tool_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def sample_python_tool_dir(tmp_path: Path) -> Path:
-    """Create a minimal valid Python tool directory."""
-    tool_dir = tmp_path / "tools" / "py_tool"
+def sample_function_tool_dir(tmp_path: Path) -> Path:
+    """Create a minimal valid ``type: function`` tool directory."""
+    tool_dir = tmp_path / "tools" / "function_tool"
     tool_dir.mkdir(parents=True)
 
     (tool_dir / "tool.yaml").write_text(
         yaml.dump({
-            "name": "py_tool",
+            "name": "function_tool",
             "version": "1.0",
-            "type": "python",
-            "description": "A sample Python tool.",
+            "type": "function",
+            "description": "A sample function tool.",
             "config": {"async_mode": True},
             "execution": {"retries": 0, "timeout": 5},
         })
     )
     (tool_dir / "request.proto").write_text(
-        'syntax = "proto3";\nmessage PyRequest { string text = 1; }\n'
+        'syntax = "proto3";\nmessage FunctionRequest { string text = 1; }\n'
     )
     (tool_dir / "response.proto").write_text(
-        'syntax = "proto3";\nmessage PyResponse { string output = 1; }\n'
+        'syntax = "proto3";\nmessage FunctionResponse { string output = 1; }\n'
     )
     (tool_dir / "logic.py").write_text(
         "async def run(inputs):\n    return {'output': inputs.get('text', '') + '_ok'}\n"

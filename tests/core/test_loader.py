@@ -53,14 +53,14 @@ class TestToolLoader:
         loader = ToolLoader()
         assert loader.load_all(tools_dir) == []
 
-    def test_load_python_tool(self, sample_python_tool_dir):
-        """Full integration: load a python-type tool directory."""
-        tools_dir = sample_python_tool_dir.parent
+    def test_load_function_tool(self, sample_function_tool_dir):
+        """Full integration: load a function-type tool directory."""
+        tools_dir = sample_function_tool_dir.parent
         loader = ToolLoader()
         defs = loader.load_all(tools_dir)
         assert len(defs) == 1
         defn = defs[0]
-        assert defn.name == "py_tool"
-        assert defn.type == "python"
+        assert defn.name == "function_tool"
+        assert defn.type == "function"
         assert defn.proto_input is not None
         assert defn.proto_output is not None

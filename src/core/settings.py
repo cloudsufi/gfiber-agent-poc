@@ -1,4 +1,33 @@
-"""Runtime settings driven entirely by environment variables."""
+"""
+Runtime settings, driven entirely by environment variables.
+
+:class:`Settings` is an immutable, process-wide singleton. It's read once at
+framework startup and never consulted again for its own values — later
+layers (middleware, handlers) receive the resolved values as constructor
+arguments.
+
+Environment variables
+---------------------
+========================  ==========================================  =========
+``AGENT_TOOLS_DIR``       Path to the directory containing tool.yaml  defaults
+                          folders. Defaults to the package's own       to
+                          ``src/tools/`` so the framework works         ``src/
+                          without configuration.                        tools``
+``AGENT_TOOLS_TIMEOUT``   Default per-call timeout in seconds for      30
+                          HTTP / RPC handlers. Tools can override
+                          via ``execution.timeout``.
+``AGENT_TOOLS_RETRIES``   Default retry count used by
+                          :class:`RetryMiddleware` when the tool       3
+                          doesn't override it.
+``AGENT_TOOLS_LOG_LEVEL`` Python logging level passed to               "INFO"
+                          ``logging.basicConfig`` during
+                          :class:`LoggingMiddleware` startup.
+========================  ==========================================  =========
+
+All env reads happen in :meth:`Settings.load`, which is ``lru_cache``-d —
+subsequent calls return the same frozen instance. Tests clear the cache
+via :meth:`Settings._reset` between runs.
+"""
 from __future__ import annotations
 
 import os

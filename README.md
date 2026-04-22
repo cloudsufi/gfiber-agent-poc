@@ -1,16 +1,17 @@
 # ai-agent-shared-tools
 
 > **Proto-first, config-driven tool framework for ADK agents.**
-> Define tools in YAML + `.proto`. Import and call them like plain Python async functions.
+> Every tool is a folder on disk: declarative `tool.yaml` for configuration,
+> `.proto` files for schema + config validation. Import and call each tool
+> like an ordinary async function.
 
 ```python
-from agent_tools import check_billing
+from agent_tools import weather_api
 
-result = await check_billing(customer_id="CUST-001", period="2026-04")
+result = await weather_api(city="London", units="metric", trace_id="t-1")
 ```
 
-> Looking for design internals, middleware order, handler contracts, or how
-> things wire together? See **[docs/architecture.md](docs/architecture.md)**.
+> Design internals, middleware order, handler contracts → **[docs/architecture.md](docs/architecture.md)**
 
 ---
 
@@ -18,12 +19,11 @@ result = await check_billing(customer_id="CUST-001", period="2026-04")
 
 - [Install](#install)
 - [Build & publish on GitHub](#build--publish-on-github)
-- [Create your first tool (5 steps)](#create-your-first-tool-5-steps)
-- [Tool types](#tool-types)
-- [Auth](#auth)
+- [Four tool types](#four-tool-types)
+- [Authoring a tool](#authoring-a-tool)
+- [Authentication](#authentication)
 - [Dynamic headers](#dynamic-headers)
 - [Use in an ADK agent](#use-in-an-adk-agent)
-- [Custom tool type](#custom-tool-type)
 - [Environment variables](#environment-variables)
 - [Develop](#develop)
 
@@ -32,505 +32,331 @@ result = await check_billing(customer_id="CUST-001", period="2026-04")
 ## Install
 
 ```bash
-# From PyPI (once published)
 pip install ai-agent-shared-tools
 
 # Optional extras
-pip install "ai-agent-shared-tools[bigquery]"   # adds google-cloud-bigquery
-pip install "ai-agent-shared-tools[mcp]"        # adds mcp client
-pip install "ai-agent-shared-tools[all]"        # everything
+pip install "ai-agent-shared-tools[mcp]"   # MCP client
+pip install "ai-agent-shared-tools[gcp]"   # google-auth + Secret Manager + Dialogflow CX
+pip install "ai-agent-shared-tools[all]"   # everything
 
-# Straight from GitHub (no publish step needed)
-pip install git+https://github.com/cloudsufi/ai-agent-shared-tools@main
-pip install git+https://github.com/cloudsufi/ai-agent-shared-tools@v0.1.0
-
-# From a GitHub Release wheel
-pip install https://github.com/cloudsufi/ai-agent-shared-tools/releases/download/v0.1.0/ai_agent_shared_tools-0.1.0-py3-none-any.whl
+# Directly from GitHub — no publish step required
+pip install git+https://github.com/cloudsufi/gfiber-agent-poc@main
 ```
 
-Import path is `agent_tools` (the distribution name only affects `pip install`):
+Import path is always `agent_tools` (the distribution name only affects `pip`):
 
 ```python
-from agent_tools import with_request_headers, check_billing
+from agent_tools import weather_api, docs_mcp, score_function, support_cta
 ```
 
 ---
 
 ## Build & publish on GitHub
 
-### 1. Build the distribution
-
 ```bash
+# 1. Build wheel + sdist
 pip install build
-make clean && python -m build        # → dist/*.whl and dist/*.tar.gz
+make clean && python -m build      # → dist/*.whl, dist/*.tar.gz
+
+# 2. Tag
+git tag v0.2.0 && git push origin v0.2.0
+
+# 3. Publish a Release (attaches artifacts)
+gh release create v0.2.0 dist/*.whl dist/*.tar.gz --generate-notes
 ```
 
-The wheel bundles your `tool.yaml` + `.proto` files — see the
-`[tool.setuptools.package-data]` block in `pyproject.toml`.
-
-### 2. Tag a release
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-### 3. Publish a GitHub Release
-
-```bash
-gh release create v0.1.0 dist/*.whl dist/*.tar.gz --generate-notes
-```
-
-Consumers install with any of the `pip install …` forms shown above.
-
-### 4. (Optional) Automate releases with GitHub Actions
-
-Add `.github/workflows/release.yml`:
-
-```yaml
-name: release
-on:
-  push:
-    tags: ["v*"]
-jobs:
-  build-release:
-    runs-on: ubuntu-latest
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install build
-      - run: python -m build
-      - uses: softprops/action-gh-release@v2
-        with: { files: dist/* }
-```
-
-Push a tag → wheel + sdist attached to the release automatically.
-
-### 5. (Optional) Publish to GitHub Packages registry
-
-Only if you want private, authenticated installs. Requires a `GITHUB_TOKEN`
-with `write:packages`:
-
-```bash
-pip install twine
-twine upload --repository-url https://pypi.pkg.github.com/cloudsufi dist/*
-```
+Consumers can then `pip install https://github.com/…/releases/download/v0.2.0/…whl`
+or `pip install git+https://github.com/…@v0.2.0`. For a `on: push: tags` GitHub
+Actions workflow template see [docs/architecture.md#packaging--releases](docs/architecture.md#packaging--releases).
 
 ---
 
-## Create your first tool (5 steps)
+## Four tool types
 
-Build a `check_billing` tool that hits a REST API, validates inputs with proto,
-and returns a typed response.
+| Type | Handler | When to use | Config schema |
+|------|---------|-------------|---------------|
+| `api`    | HTTP via httpx | OpenAPI-style call to any REST service | [api_tool_config.proto](src/schemas/api_tool_config.proto) |
+| `mcp`    | MCP client | Delegates to an MCP server's named tool | [mcp_tool_config.proto](src/schemas/mcp_tool_config.proto) |
+| `function` | Runs `logic.py` | Anything that's pure Python logic | [function_tool_config.proto](src/schemas/function_tool_config.proto) |
+| `cta`    | Dialogflow CX | Route an utterance through a Google conversational agent | [cta_tool_config.proto](src/schemas/cta_tool_config.proto) |
 
-### 1. Folder
+`mcp` and `cta` both support `mock_mode: true` — returns a deterministic stub
+so you can develop and demo without a running MCP server or CX agent.
 
-Each tool owns a folder inside `src/tools/` (or your custom `AGENT_TOOLS_DIR`):
+These four are the only types registered by default. Adding a new type means
+three steps and zero edits to framework code — see [docs/architecture.md §9](docs/architecture.md#9-extending-the-framework).
+
+---
+
+## Authoring a tool
+
+Every tool is a directory under `src/tools/<tool_name>/`:
 
 ```
-src/tools/check_billing/          ← folder name = tool name
-├── tool.yaml
-├── request.proto
-└── response.proto
+src/tools/weather_api/
+├── tool.yaml          # config — validated against the type's .proto at load time
+├── request.proto      # input schema — validates kwargs at call time
+└── response.proto     # output schema — validates handler result at call time
 ```
 
-### 2. `tool.yaml`
+A fourth file, `logic.py`, is required only for `type: function`.
+
+### Example — `type: api`
 
 ```yaml
-name:        check_billing          # must match the folder name
+# src/tools/weather_api/tool.yaml
+name:        weather_api
 version:     "1.0"
-type:        api                    # api | rest | python | mcp | grpc | bigquery
-description: "Retrieve billing summary for a customer."
+type:        api
+description: "Return current weather for a city."
+
+input_schema:  request.proto
+output_schema: response.proto
 
 config:
-  endpoint: "https://api.billing.internal/v1/bills"
+  endpoint: "https://api.example.com/v1/weather"
   method:   GET
 
+  headers:
+    Accept:      application/json
+    X-Agent-Env: "{{env:AGENT_ENV}}"      # optional — skipped when env var unset
+    X-Trace-Id:  "{{trace_id}}"           # from request field
+
+  params:
+    city:  "{{city}}"
+    units: "{{units}}"
+
   auth:
     bearer:
-      token_env: BILLING_API_KEY    # reads os.environ["BILLING_API_KEY"]
+      token_env: WEATHER_API_KEY          # legacy shorthand — still works
 
-  # URL query params — {{field}} pulls from the request proto at call time
-  params:
-    customer_id: "{{customer_id}}"
-    period:      "{{period}}"
-
-  timeout_seconds: 15
-  max_retries:     2
+  timeout_seconds: 10
+  max_retries:     1
 
 execution:
-  timeout: 15
-  retries: 2
+  retries: 1
+  timeout: 10
 ```
-
-**Key `config` fields by type:**
-
-| Field | Applies to | Description |
-|-------|-----------|-------------|
-| `endpoint` | api, grpc, mcp | Target URL or host:port |
-| `method` | api | HTTP verb: GET, POST, PUT, … |
-| `auth` | api, rest, mcp, grpc | Auth block — see [Auth](#auth) |
-| `params` | api | URL query params (`{{field}}`, `{{env:VAR}}`) |
-| `body_template` | api | JSON body template (`{{field}}`) |
-| `headers` | api, rest | Headers map (`{{field}}`, `{{env:VAR}}`) |
-| `timeout_seconds` | all | Request timeout |
-| `max_retries` | api | Retry count |
-
-### 3. `request.proto`
 
 ```proto
+// request.proto
 syntax = "proto3";
-package check_billing;
+package weather_api;
 
-message CheckBillingRequest {
-  string customer_id = 1;   // maps to {{customer_id}}
-  string period      = 2;   // maps to {{period}}
+message WeatherApiRequest {
+  string city     = 1;
+  string units    = 2;
+  string trace_id = 3;
 }
 ```
 
-### 4. `response.proto`
-
-```proto
-syntax = "proto3";
-package check_billing;
-
-message CheckBillingResponse {
-  string   customer_id  = 1;
-  double   total_amount = 2;
-  string   currency     = 3;
-  string   status       = 4;
-  string   period       = 5;
-  repeated LineItem line_items = 6;
-}
-
-message LineItem {
-  string description = 1;
-  double amount      = 2;
-  string code        = 3;
-}
-```
-
-> `request.proto` and `response.proto` are both optional. Omit them if the tool
-> doesn't need schema validation.
-
-### 5. Set credentials and call
-
-```bash
-export BILLING_API_KEY="sk-your-api-key-here"
-```
+Import and call:
 
 ```python
-from agent_tools import check_billing
-
-result = await check_billing(customer_id="CUST-001", period="2026-04")
-print(result["total_amount"])   # → 1234.56
+from agent_tools import weather_api
+result = await weather_api(city="London", units="metric", trace_id="t-1")
 ```
 
-Tools are discovered, validated, and compiled at **import time**. Any
-misconfiguration (bad YAML, unknown field, missing required config) raises
-immediately — not at first call.
-
----
-
-## Tool types
-
-### API tool (HTTP / REST)
+### Example — `type: function`
 
 ```yaml
-type: api
+name:        score_function
+type:        function
+description: "Score a lead using local business rules."
+input_schema:  request.proto
+output_schema: response.proto
+
 config:
-  endpoint: "https://api.example.com/v1/resource"
-  method:   POST
-  headers:
-    Content-Type: application/json
-  auth:
-    bearer:
-      token_env: MY_TOKEN
-  body_template: '{"id": "{{id}}", "action": "{{action}}"}'
-  timeout_seconds: 30
-  max_retries: 3
-```
-
-`{{placeholder}}` in `params`, `body_template`, and `headers` is filled from
-the validated request proto fields at call time. See [Dynamic headers](#dynamic-headers).
-
-### Python tool (custom logic)
-
-```
-tools/enrich_lead/
-├── tool.yaml
-├── request.proto
-├── response.proto
-└── logic.py           ← must export async run(inputs) -> dict
-```
-
-```yaml
-type: python
-config:
+  parameters:                         # static values merged into run() inputs
+    model_version: "v2.3"
+    threshold:     "0.60"
   async_mode: true
-  parameters:
-    api_url: "https://data.example.com/enrich"   # static params merged into inputs
 ```
 
 ```python
-# logic.py
+# logic.py — MUST export async run(inputs: dict) -> dict
 async def run(inputs: dict) -> dict:
-    email   = inputs["email"]
-    company = inputs["company"]
-    # ... your logic ...
-    return {"score": 0.92, "industry": "SaaS", "employees": 250}
+    score = 0.3 + 0.35 * (inputs["annual_spend"] >= 50_000)
+    return {"email": inputs["email"], "score": round(score, 2)}
 ```
 
-### MCP tool
+### Example — `type: cta`
 
 ```yaml
-type: mcp
+name:        support_cta
+type:        cta
+description: "Route a query to the support Dialogflow CX agent."
+input_schema:  request.proto
+output_schema: response.proto
+
 config:
-  endpoint: "https://mcp.example.com"
+  project_id:       my-gcp-project
+  location:         us-central1
+  agent_id:         00000000-0000-0000-0000-000000000000
+  language_code:    en
+  text_field:       text
+  session_id_field: session_id
+
+  mock_mode: true        # flip to false in production
+  # auth:
+  #   service_agent:
+  #     scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+
+  timeout_seconds: 20
+```
+
+### Example — `type: mcp`
+
+```yaml
+name:        docs_mcp
+type:        mcp
+description: "Search internal documentation via an MCP server."
+
+config:
+  endpoint:  "https://mcp.example.internal"
   tool_name: search_documents
   auth:
     bearer:
       token_env: MCP_API_KEY
+  mock_mode: true
   timeout_seconds: 20
-```
-
-### gRPC tool
-
-```yaml
-type: grpc
-config:
-  endpoint: "grpc.internal:443"
-  service_name: BillingService
-  method_name:  GetSummary
-  use_tls:      true
-  auth:
-    bearer:
-      token_env: GRPC_TOKEN
-  timeout_seconds: 10
-```
-
-### BigQuery tool
-
-Requires `pip install "ai-agent-shared-tools[bigquery]"`.
-
-```yaml
-type: bigquery
-config:
-  project: my-gcp-project
-  dataset: analytics
-  query:   "SELECT * FROM analytics.events WHERE user_id = @user_id LIMIT 100"
-  max_results: 100
-```
-
-### OpenAPI / REST spec tool
-
-Loads an OpenAPI spec and resolves the operation by `operationId`.
-
-```yaml
-type: rest
-config:
-  spec_url:     "https://api.example.com/openapi.json"   # or spec_file: ./openapi.yaml
-  operation_id: listOrders
-  auth:
-    api_key:
-      header_name: X-Api-Key
-      key_env:     MY_API_KEY
-  timeout_seconds: 15
 ```
 
 ---
 
-## Auth
+## Authentication
 
-Credentials come from env vars — never from `tool.yaml`.
+Credentials never live in `tool.yaml`. Every credential value is a `SecretRef`
+that names its source:
+
+| Source      | Meaning                                            |
+|-------------|----------------------------------------------------|
+| `ENV`       | `os.environ[<name>]` — default                    |
+| `HEADER`    | Inbound HTTP header (caller-supplied, per-call)    |
+| `PARAMETER` | Request proto input field                          |
+| `GCP_SECRET`| Google Secret Manager resource name                |
+
+### Auth types
 
 ```yaml
 config:
   auth:
     # 1. Bearer token
     bearer:
-      token_env: MY_API_TOKEN       # → Authorization: Bearer <value>
+      token:
+        source: ENV
+        name:   MY_API_TOKEN
+    # (legacy shorthand still works:)
+    # bearer: { token_env: MY_API_TOKEN }
 
     # 2. API key header
     api_key:
       header_name: X-Api-Key
-      key_env:     MY_API_KEY       # → X-Api-Key: <value>
+      key: { source: ENV, name: MY_API_KEY }
 
     # 3. OAuth 2.0 client credentials
     oauth2:
-      client_id_env:     OAUTH_CLIENT_ID
-      client_secret_env: OAUTH_CLIENT_SECRET
-      token_url:         "https://auth.example.com/token"
-      scope:             "read write"
+      client_id:     { source: ENV, name: OAUTH_CLIENT_ID }
+      client_secret: { source: GCP_SECRET, name: "projects/P/secrets/oauth-secret/versions/latest" }
+      token_url:     "https://auth.example.com/token"
+      scope:         "read write"
 
     # 4. HTTP Basic
     basic:
-      username_env: MY_USERNAME
-      password_env: MY_PASSWORD
+      username: { source: ENV, name: MY_USERNAME }
+      password: { source: ENV, name: MY_PASSWORD }
+
+    # 5. GCP service account (JSON key → OAuth2 access or ID token)
+    service_account:
+      credentials: { source: GCP_SECRET, name: "projects/P/secrets/sa-json/versions/latest" }
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      # audience: "https://my-cloud-run-service.run.app"    # to mint an ID token instead
+
+    # 6. GCP service agent (Application Default Credentials, optional impersonation)
+    service_agent:
+      target_principal: svc-agent@my-project.iam.gserviceaccount.com
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"]
 ```
+
+Credentials are resolved once per call in `AuthMiddleware`, exposed on
+`ctx.resolved_auth`, and injected as headers by the relevant handler. Headers
+that need a caller-supplied value (like a user JWT) can pull from `HEADER`
+via the dynamic-headers mechanism below.
 
 ---
 
 ## Dynamic headers
 
-Three ways to get a header onto an outgoing request — combinable, with clear
-precedence.
+Headers applied to an outgoing API request come from three sources (last wins):
 
-### 1. Static or templated in `tool.yaml`
+1. Static `headers:` from `tool.yaml`
+2. Templated values in the same map:
+   - `{{field}}` — request proto field
+   - `{{env:VAR}}` — process env (header is silently skipped if var is unset)
+3. Auth headers injected by `AuthMiddleware`
+
+A fourth source — **per-call runtime headers from agent code** — is **opt-in
+per tool**. The tool must declare an allow-list in `tool.yaml`:
 
 ```yaml
 config:
-  headers:
-    Accept:        application/json
-    X-Tenant-Id:   "{{tenant_id}}"        # from request proto field
-    X-App-Context: "{{env:APP_CONTEXT}}"  # from process env var
+  runtime_headers:         # explicit opt-in. Absent/empty ⇒ feature is off.
+    - X-Trace-Id
+    - X-Tenant-Id
+    - Authorization        # include here to let agent code override auth
 ```
 
-- `{{field}}` → pulls from the validated request input.
-- `{{env:VAR}}` → pulls from `os.environ`.
-- A header is **silently skipped** if any of its tokens is missing — declare
-  optional trace/tenant headers safely.
-
-### 2. Env vars set on the agent side
-
-Set the env var anywhere before the process starts (shell, systemd, k8s, `.env`):
-
-```bash
-export APP_CONTEXT=prod
-```
-
-The `{{env:APP_CONTEXT}}` token above picks it up.
-
-### 3. Runtime injection from agent code
-
-Two equivalent entry points:
+Without that block, anything the agent passes via `with_request_headers(...)`
+or the `_headers=` kwarg is **silently dropped** before the request is sent.
+With the block in place, only names that match (case-insensitive) reach the
+wire — everything else is filtered out.
 
 ```python
-from agent_tools import with_request_headers, check_billing
+from agent_tools import with_request_headers, weather_api
 
-# Block-scoped — applies to every tool call inside
-with with_request_headers({"X-Trace-Id": trace, "X-Tenant-Id": tenant}):
-    await check_billing(customer_id="CUST-001", period="2026-04")
+# weather_api declares runtime_headers: [X-Trace-Id].
+# X-Trace-Id overrides the yaml-templated value. X-Secret is dropped.
+with with_request_headers(
+    {"X-Trace-Id": trace, "X-Secret": "would-be-dropped"}
+):
+    await weather_api(city="London", units="metric", trace_id="t-1")
 
-# One-shot via the reserved _headers kwarg
-await check_billing(
-    customer_id="CUST-001",
-    period="2026-04",
-    _headers={"X-Trace-Id": trace},
+# One-shot via the reserved _headers= kwarg — same allow-list rules apply.
+await weather_api(
+    city="Tokyo",
+    units="metric",
+    trace_id="tool-trace",
+    _headers={"X-Trace-Id": "runtime-wins"},
 )
 ```
 
-### Precedence (last wins)
-
-1. `tool.yaml` headers (after template resolution)
-2. Auth headers injected by `AuthMiddleware`
-3. `with_request_headers(...)` / `_headers=` — **highest**
-
-Runtime headers override auth too — useful for testing or impersonation.
+Declaring `Authorization` in `runtime_headers` is how you let agent code
+override the auth-injected token — useful for testing / impersonation, and
+explicit so it can't happen accidentally.
 
 ---
 
 ## Use in an ADK agent
 
-Every imported tool carries `.runtime`, `.schema`, `.all_schemas()`, and
-`.all_tools()` — no separate runtime import needed.
+Every imported tool carries `.schema`, `.all_schemas()`, `.all_tools()`,
+`.runtime`. The demo agent wraps each in a `BaseTool` adapter so the ADK
+`LlmAgent` can consume them directly:
 
 ```python
-from agent_tools import check_billing, enrich_lead
-from google.adk.agents import LlmAgent
+# test_agent/agent.py
+from agent_tools import weather_api
 
-# Single tool
-agent = LlmAgent(
-    model        = "gemini-2.0-flash",
-    tools        = [check_billing],
-    tool_schemas = [check_billing.schema],   # JSON Schema derived from request.proto
-)
-
-# All registered tools at once
-agent = LlmAgent(
-    model        = "gemini-2.0-flash",
-    tools        = check_billing.all_tools(),
-    tool_schemas = check_billing.all_schemas(),
-)
-
-# Subset of tools
-agent = LlmAgent(
-    model        = "gemini-2.0-flash",
-    tools        = check_billing.schemas_for("check_billing", "enrich_lead"),
-)
-
-# Direct call (works outside an agent too)
-result = await check_billing(customer_id="CUST-001", period="2026-04")
+def build_agent():
+    from google.adk.agents import LlmAgent
+    tools = [AgentToolsAdapter(tf) for tf in weather_api.all_tools()]
+    return LlmAgent(
+        model="gemini-2.0-flash",
+        name="demo_agent",
+        tools=tools,
+    )
 ```
 
-### What `.schema` looks like
-
-```python
-check_billing.schema
-# {
-#   "name": "check_billing",
-#   "description": "Retrieve billing summary for a customer.",
-#   "parameters": {
-#     "type": "object",
-#     "properties": {
-#       "customer_id": {"type": "string"},
-#       "period":      {"type": "string"}
-#     },
-#     "required": ["customer_id", "period"]
-#   }
-# }
-```
-
----
-
-## Custom tool type
-
-Three files. No changes to core.
-
-**1. Config schema** (`src/schemas/kafka_tool_config.proto`):
-
-```proto
-syntax = "proto3";
-package agent_tools;
-import "auth_config.proto";
-
-message KafkaToolConfig {
-  string     bootstrap_servers = 1;
-  string     topic             = 2;
-  AuthConfig auth              = 3;
-  int32      timeout_seconds   = 4;
-}
-```
-
-**2. Handler** (`src/handlers/kafka_handler.py`):
-
-```python
-from agent_tools.handlers.base import BaseHandler
-
-class KafkaHandler(BaseHandler):
-    async def execute(self, ctx):
-        cfg = ctx.tool_def.config
-        # ... produce/consume from Kafka ...
-        return {"status": "ok"}
-```
-
-**3. Register — before importing `agent_tools`:**
-
-```python
-from pathlib import Path
-import agent_tools.core.type_registry as tr
-from agent_tools.handlers.kafka_handler import KafkaHandler
-
-tr.default_type_registry.register(
-    "kafka",
-    Path("src/schemas/kafka_tool_config.proto"),
-    KafkaHandler,
-)
-
-import agent_tools   # now type: kafka is recognised
-```
+See [test_agent/](test_agent/) for the full working adapter + runnable demo.
 
 ---
 
@@ -538,17 +364,10 @@ import agent_tools   # now type: kafka is recognised
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `AGENT_TOOLS_DIR` | `src/tools/` (package-relative) | Path to your tools directory |
-| `AGENT_TOOLS_TIMEOUT` | `30` | Default HTTP/RPC timeout in seconds |
-| `AGENT_TOOLS_RETRIES` | `3` | Default retry attempts per call |
+| `AGENT_TOOLS_DIR`       | `src/tools/` (package-relative) | Path to your tools directory |
+| `AGENT_TOOLS_TIMEOUT`   | `30` | Default HTTP/RPC timeout (seconds) |
+| `AGENT_TOOLS_RETRIES`   | `3`  | Default retry attempts per call |
 | `AGENT_TOOLS_LOG_LEVEL` | `INFO` | Python logging level |
-
-```bash
-export AGENT_TOOLS_DIR="/path/to/my/tools"
-export AGENT_TOOLS_TIMEOUT=60
-export AGENT_TOOLS_RETRIES=5
-export AGENT_TOOLS_LOG_LEVEL=DEBUG
-```
 
 ---
 
@@ -556,17 +375,20 @@ export AGENT_TOOLS_LOG_LEVEL=DEBUG
 
 ```bash
 make install        # pip install -e ".[dev]"
-make test           # full test suite
+make test           # pytest — 131 tests cover core + handlers + middleware + proto
 make test-cov       # with coverage report
 make lint           # ruff check + format
 make typecheck      # mypy
 make check          # lint + typecheck + test
 make build          # python -m build
-make clean          # remove build artefacts
 ```
 
-Package layout, middleware order, handler contracts, startup sequence →
-**[docs/architecture.md](docs/architecture.md)**.
+Run the demo against the four sample tools:
+
+```bash
+python test_agent/demo.py            # sections 1-7 (no ADK needed)
+python test_agent/demo.py --adk      # + ADK LlmAgent (needs google-adk)
+```
 
 ---
 

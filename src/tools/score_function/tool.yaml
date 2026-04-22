@@ -1,0 +1,18 @@
+name:        score_function
+version:     "1.0"
+type:        function
+description: "Score a lead using local business rules — no external calls."
+
+input_schema:  request.proto
+output_schema: response.proto
+
+config:
+  # Static inputs merged into the run() call alongside validated request fields.
+  parameters:
+    model_version: "v2.3"
+    threshold:     "0.60"
+  async_mode: true
+
+execution:
+  retries: 0
+  timeout: 5

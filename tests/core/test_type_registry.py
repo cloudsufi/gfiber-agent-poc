@@ -13,9 +13,9 @@ from agent_tools.handlers.api_handler import APIHandler
 class TestToolTypeRegistry:
     def test_register_and_get(self, tmp_path):
         reg = ToolTypeRegistry()
-        reg.register("custom", tmp_path / "c.proto", APIHandler)
-        entry = reg.get("custom")
-        assert entry.name == "custom"
+        reg.register("myext", tmp_path / "c.proto", APIHandler)
+        entry = reg.get("myext")
+        assert entry.name == "myext"
         assert entry.handler_class is APIHandler
 
     def test_get_unknown_raises(self):
@@ -35,6 +35,9 @@ class TestToolTypeRegistry:
         assert "mine" in reg
         assert "other" not in reg
 
-    def test_default_registry_has_builtin_types(self):
-        for expected in ("api", "mcp", "python", "grpc", "bigquery", "rest"):
+    def test_default_registry_has_the_four_primary_types(self):
+        for expected in ("api", "mcp", "function", "cta"):
             assert expected in default_type_registry
+
+    def test_default_registry_has_only_four_types(self):
+        assert default_type_registry.known_types() == ["api", "cta", "function", "mcp"]
