@@ -1,6 +1,22 @@
 """
 Validates the ``config:`` block of a ``tool.yaml`` against the tool type's
 proto schema at load time (not at call time).
+
+Why proto for config
+--------------------
+Using a ``.proto`` schema for the YAML config gives three compile-time-ish
+guarantees without writing any Python validator code:
+
+1. **Typed field access** — ``timeout_seconds: "10"`` (string) will fail
+   because protobuf knows the field is ``int32``.
+2. **No silent typos** — ``methd: GET`` instead of ``method: GET`` raises
+   "unknown field methd" instead of silently using the default verb.
+3. **Required vs. optional** — fields are as documented in the proto file,
+   with no extra Python-level convention layer to get out of sync.
+
+Validation is a round-trip: dict → Message → dict. The returned dict is
+the **normalized** form (field names canonicalized, defaults filled in)
+that the runtime actually stores on :class:`ToolDefinition`.
 """
 from __future__ import annotations
 

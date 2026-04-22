@@ -1,6 +1,28 @@
 """
-ProtoSchemaConverter — converts a :class:`~agent_tools.proto.descriptor.ProtoDescriptor`
-into a JSON Schema dict suitable for LLM / ADK tool declarations.
+ProtoSchemaConverter — turns a proto message into an LLM tool schema.
+
+Converts a compiled :class:`ProtoDescriptor` into a JSON Schema dict
+suitable for ADK / LLM tool declarations. Consumed by
+:attr:`ToolDefinition.adk_schema`, which is what agent framework code
+receives when it asks for ``tool.schema``.
+
+Type mapping
+------------
+* Proto scalars → JSON Schema primitives via ``_SCALAR_TYPE_MAP``.
+* ``repeated X`` → ``{"type": "array", "items": <X schema>}``.
+* ``message`` (nested)  → ``{"type": "object", "properties": {...}}``,
+  recursing through the nested message's fields.
+* ``enum`` → ``{"type": "string", "enum": [<value names>]}``.
+* ``bytes`` → ``{"type": "string", "format": "byte"}``.
+
+Required-field policy
+---------------------
+Proto-3 has no "required" concept at the wire level — every scalar has a
+zero default. For LLM guidance, though, it's useful to mark top-level
+non-message scalar fields as required so the model supplies them rather
+than relying on zeros. That's what the ``required`` list in the output
+schema does. Nested messages and ``repeated`` fields are never added to
+``required`` — they're structurally allowed to be absent.
 """
 from __future__ import annotations
 

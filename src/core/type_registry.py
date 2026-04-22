@@ -1,29 +1,44 @@
 """
 Registry that maps tool type names to their config schema and handler class.
 
-Built-in types are registered via :func:`_make_default_registry` at module
-import time.  Third-party types use :meth:`ToolTypeRegistry.register` — no
-changes to framework code required.
+This is what turns a bare ``type: api`` string in a tool.yaml into the two
+concrete dependencies the loader needs: (1) a path to the ``.proto`` schema
+used to validate the ``config:`` block, and (2) the handler class that will
+run the tool at call time.
+
+The four primary types (``api``, ``mcp``, ``function``, ``cta``) are
+registered at module import time by :func:`_make_default_registry`. Anyone
+can register a new type **before** ``import agent_tools`` completes, and
+the loader will pick it up::
+
+    from pathlib import Path
+    import agent_tools.core.type_registry as tr
+    from my_package.handlers import KafkaHandler
+
+    tr.default_type_registry.register(
+        "kafka",
+        Path("src/schemas/kafka_tool_config.proto"),
+        KafkaHandler,
+    )
+    import agent_tools  # now tools with `type: kafka` load successfully
+
+Late registration (after the tools have already loaded) is allowed but
+only affects tools loaded afterwards — the existing ones keep whatever
+handler class was resolved when they were loaded.
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agent_tools.core.definition import ToolTypeEntry
-
-if TYPE_CHECKING:
-    pass
 
 # Absolute path to the bundled schemas directory
 _SCHEMAS: Path = Path(__file__).parent.parent / "schemas"
 
 
 class ToolTypeRegistry:
-    """
-    Maps tool type name strings to :class:`~agent_tools.core.definition.ToolTypeEntry`
-    objects (config schema path + handler class).
-    """
+    """Maps tool type name strings to :class:`ToolTypeEntry` objects."""
 
     def __init__(self) -> None:
         self._entries: dict[str, ToolTypeEntry] = {}
@@ -34,13 +49,11 @@ class ToolTypeRegistry:
         config_proto_path: Path,
         handler_class: Any,  # type: ignore[misc]
     ) -> None:
-        """
-        Register a tool type.
+        """Register a tool type.
 
         :param name:               Type identifier used in ``tool.yaml`` (e.g. ``"api"``).
         :param config_proto_path:  Absolute path to the config ``.proto`` schema.
-        :param handler_class:      Handler class (subclass of
-                                   :class:`~agent_tools.handlers.base.BaseHandler`).
+        :param handler_class:      Handler class (subclass of :class:`BaseHandler`).
         """
         self._entries[name] = ToolTypeEntry(
             name=name,
@@ -49,8 +62,7 @@ class ToolTypeRegistry:
         )
 
     def get(self, name: str) -> ToolTypeEntry:
-        """
-        Return the :class:`ToolTypeEntry` for *name*.
+        """Return the :class:`ToolTypeEntry` for *name*.
 
         :raises KeyError: if the type is not registered.
         """
@@ -70,23 +82,19 @@ class ToolTypeRegistry:
 
 
 def _make_default_registry() -> ToolTypeRegistry:
-    """Build and return the registry pre-loaded with all built-in tool types."""
-    # Deferred imports so that importing this module doesn't pull in httpx / grpc
-    # until actually needed.
+    """Build and return the registry pre-loaded with the four primary types."""
+    # Deferred imports — importing this module shouldn't pull handler deps
+    # until the framework actually needs them.
     from agent_tools.handlers.api_handler import APIHandler
-    from agent_tools.handlers.bigquery_handler import BigQueryHandler
-    from agent_tools.handlers.grpc_handler import GRPCHandler
+    from agent_tools.handlers.cta_handler import CTAHandler
+    from agent_tools.handlers.function_handler import FunctionHandler
     from agent_tools.handlers.mcp_handler import MCPHandler
-    from agent_tools.handlers.python_handler import PythonHandler
-    from agent_tools.handlers.rest_handler import RESTHandler
 
     r = ToolTypeRegistry()
-    r.register("api", _SCHEMAS / "api_tool_config.proto", APIHandler)
-    r.register("mcp", _SCHEMAS / "mcp_tool_config.proto", MCPHandler)
-    r.register("python", _SCHEMAS / "python_tool_config.proto", PythonHandler)
-    r.register("grpc", _SCHEMAS / "grpc_tool_config.proto", GRPCHandler)
-    r.register("bigquery", _SCHEMAS / "bigquery_tool_config.proto", BigQueryHandler)
-    r.register("rest", _SCHEMAS / "rest_tool_config.proto", RESTHandler)
+    r.register("api",      _SCHEMAS / "api_tool_config.proto",      APIHandler)
+    r.register("mcp",      _SCHEMAS / "mcp_tool_config.proto",      MCPHandler)
+    r.register("function", _SCHEMAS / "function_tool_config.proto", FunctionHandler)
+    r.register("cta",      _SCHEMAS / "cta_tool_config.proto",      CTAHandler)
     return r
 
 

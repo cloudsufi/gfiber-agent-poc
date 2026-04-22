@@ -1,6 +1,34 @@
 """
-Loads tool directories into validated :class:`~agent_tools.core.definition.ToolDefinition`
-objects.  All work happens at startup — synchronous, fail-fast.
+Loads tool directories into validated
+:class:`~agent_tools.core.definition.ToolDefinition` objects.
+
+Responsibility
+--------------
+This module turns a **directory on disk** into an **in-memory tool contract**.
+Everything it does happens at startup — synchronous, fail-fast. By the time
+:meth:`ToolLoader.load_all` returns, every tool is either fully-validated or
+has raised an exception with a pointed error message.
+
+Per-tool pipeline
+-----------------
+For each ``<tools_dir>/<tool_name>/`` with a ``tool.yaml``:
+
+1. Parse ``tool.yaml`` into a plain dict (yaml safe_load, mapping required).
+2. Resolve the tool ``type`` against :class:`ToolTypeRegistry` to get the
+   config schema path and handler class. Unknown type → :class:`KeyError`.
+3. Hand the ``config:`` block to :class:`ConfigValidator`, which parses it
+   through the type's ``.proto`` schema. Returns the round-tripped dict;
+   raises :class:`ValueError` on any violation (missing required field,
+   unknown field, wrong type).
+4. Compile ``request.proto`` and ``response.proto`` via :class:`ProtoLoader`.
+   Both are optional; a missing file returns ``None``.
+5. Pack everything into a :class:`ToolDefinition` and return.
+
+Design rationale
+----------------
+Every validation check here runs **once** at process start. A broken
+``tool.yaml`` never reaches the first call site — the framework refuses to
+import rather than erroring mid-conversation with an LLM.
 """
 from __future__ import annotations
 
@@ -39,7 +67,18 @@ class ToolLoader:
     # ── public ────────────────────────────────────────────────────────────────
 
     def load(self, tool_dir: Path) -> ToolDefinition:
-        """Load a single tool directory and return a :class:`ToolDefinition`."""
+        """
+        Load a single tool directory and return a :class:`ToolDefinition`.
+
+        Runs the per-tool pipeline documented on the module. All validation
+        happens here — the returned definition is ready for the runtime.
+
+        :raises FileNotFoundError: if ``tool.yaml`` or the type's config
+            proto is missing.
+        :raises KeyError: if the YAML ``type`` isn't registered.
+        :raises ValueError: on any config-validation failure (with a
+            human-readable message pointing at the offending field).
+        """
         raw = self._read_yaml(tool_dir / "tool.yaml")
         tool_name = raw["name"]
         tool_type = raw["type"]
@@ -69,8 +108,17 @@ class ToolLoader:
 
     def load_all(self, tools_dir: Path) -> list[ToolDefinition]:
         """
-        Scan *tools_dir* for sub-directories containing ``tool.yaml`` and load
-        each one.  Returns definitions in directory-name order.
+        Scan *tools_dir* for sub-directories containing ``tool.yaml`` and
+        load each one.
+
+        Sub-directories without a ``tool.yaml`` are silently skipped — this
+        lets folders like ``__pycache__`` coexist with tool folders without
+        requiring special-case filtering. Loose files in ``tools_dir`` are
+        also ignored.
+
+        :returns: definitions in directory-name sort order. Stable ordering
+            helps with reproducible log output and agent schema listings.
+        :raises FileNotFoundError: if *tools_dir* itself doesn't exist.
         """
         if not tools_dir.is_dir():
             raise FileNotFoundError(f"tools_dir not found: {tools_dir}")

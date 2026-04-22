@@ -12,4 +12,13 @@ message APIToolConfig {
   string request_content_type      = 7;
   int32  timeout_seconds           = 8;
   int32  max_retries               = 9;
+
+  // Explicit allow-list of header names accepted from the agent-side runtime
+  // context (``with_request_headers(...)`` or the ``_headers=`` kwarg on a
+  // tool call). If this field is empty or absent, runtime-injected headers
+  // are **not** merged into the outgoing request.
+  //
+  // Comparison is case-insensitive. Only headers whose names appear here
+  // reach the wire; everything else the agent injected is silently dropped.
+  repeated string runtime_headers  = 10;
 }

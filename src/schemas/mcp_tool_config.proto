@@ -8,4 +8,8 @@ message MCPToolConfig {
   AuthConfig auth                   = 3;
   map<string, string> metadata      = 4;
   int32  timeout_seconds            = 5;
+
+  // Return a deterministic stub rather than calling an MCP server. Useful
+  // for demos and tests. Stub echoes the input with a tool_name marker.
+  bool mock_mode                    = 6;
 }

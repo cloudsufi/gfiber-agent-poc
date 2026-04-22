@@ -1,9 +1,0 @@
-syntax = "proto3";
-package agent_tools;
-
-message BigQueryToolConfig {
-  string project     = 1;
-  string dataset     = 2;
-  string query       = 3;
-  int32  max_results = 4;
-}

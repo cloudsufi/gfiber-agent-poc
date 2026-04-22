@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_tools import enrich_lead  # triggers framework startup
+from agent_tools import weather_api  # triggers framework startup
 
-# ``enrich_lead`` is an arbitrary handle — every ToolFunction exposes the
+# ``weather_api`` is an arbitrary handle — every ToolFunction exposes the
 # same ``all_tools()`` / ``all_schemas()`` view over the shared registry.
-_ALL_TOOL_FUNCTIONS = enrich_lead.all_tools()
+_ALL_TOOL_FUNCTIONS = weather_api.all_tools()
 
 
 def build_agent():

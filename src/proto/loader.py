@@ -2,15 +2,36 @@
 ProtoLoader — compiles ``.proto`` files via ``grpc_tools.protoc`` and returns
 :class:`~agent_tools.proto.descriptor.ProtoDescriptor` objects.
 
+This is the one module that deals with protobuf's dynamic-compilation
+warts. Everything else in ``agent_tools.proto`` is a thin wrapper over
+what comes out of here.
+
 Design notes
 ------------
-* Proto files are compiled at most once per process (cached by resolved path).
-* Files that share a directory (e.g. ``auth_config.proto`` imported by
-  ``api_tool_config.proto``) are compiled together so generated ``_pb2``
-  siblings are co-located and importable.
-* Tool-specific ``request.proto`` / ``response.proto`` are renamed to
-  ``<tool_name>__request.proto`` etc. before compilation so protobuf's global
-  descriptor pool never sees two files with the same logical name.
+* **Per-path caching** — compiled at most once per process (keyed by
+  ``Path.resolve()``).  Subsequent ``load()`` calls for the same path
+  return the cached :class:`ProtoDescriptor`.
+* **Directory co-compilation** — when multiple ``.proto`` files in the
+  same directory import one another (e.g. ``api_tool_config.proto`` imports
+  ``auth_config.proto``), we compile all of them together into a shared
+  output directory so the generated ``*_pb2.py`` siblings can find each
+  other at import time. This avoids "No module named auth_config_pb2"
+  errors when Python tries to resolve the import.
+* **Generic-name collision avoidance** — protobuf's global descriptor
+  pool complains loudly if two compiled files have the same logical name.
+  Nearly every tool ships a ``request.proto`` and a ``response.proto``,
+  so a naive compile would blow up as soon as the second tool loads. We
+  sidestep this by renaming generic files to
+  ``<parent_dir_name>__<original_name>.proto`` (e.g.
+  ``weather_api__request.proto``) before handing them to ``protoc``.
+  The rename is only for protoc's book-keeping — the generated message
+  class still has the name declared in the proto source.
+
+Failure modes
+-------------
+* ``grpcio-tools`` missing  → :class:`ImportError` with install hint.
+* ``protoc`` exits non-zero → :class:`RuntimeError` with exit code and
+  path, nudging the user to check the proto syntax.
 """
 from __future__ import annotations
 
@@ -179,7 +200,20 @@ class ProtoLoader:
         out_dir: str,
         proto_path: Path,
     ) -> ProtoDescriptor:
-        """Import (or re-import) a *_pb2 module from *out_dir*."""
+        """
+        Import (or re-import) a ``*_pb2`` module from *out_dir*.
+
+        ``importlib.invalidate_caches()`` is called before the import so
+        Python rediscovers ``*_pb2`` files that have been written to an
+        ``out_dir`` which was previously added to ``sys.path``. Without this,
+        the file finder's negative cache would short-circuit the lookup.
+        The old module entry (if any) is popped from ``sys.modules`` so we
+        pick up the freshly compiled bytecode rather than a stale one.
+
+        ``sys.path`` is mutated temporarily in a ``try``/``finally`` block
+        so the out_dir never permanently pollutes the import path — that
+        would eventually break tests that spin up throwaway runtimes.
+        """
         sys.path.insert(0, out_dir)
         # Invalidate Python's import caches so newly compiled *_pb2 files
         # are discovered even if this out_dir was previously on sys.path.

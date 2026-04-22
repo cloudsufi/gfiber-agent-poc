@@ -2,36 +2,78 @@ syntax = "proto3";
 package agent_tools;
 
 // Shared typed auth config — embedded in every tool type that needs credentials.
+//
+// Every credential value is wrapped in a ``SecretRef`` that tells the runtime
+// WHERE to read it from:
+//
+//   ENV         → os.environ[<name>]                        (default)
+//   HEADER      → HTTP header name on the inbound request   (agent → framework)
+//   PARAMETER   → request proto input field name
+//   GCP_SECRET  → Google Secret Manager resource name
+//                 (projects/<P>/secrets/<S>/versions/<V>)
+//
+// Legacy string fields (token_env, username_env, …) are preserved so older
+// tool.yaml files keep working — the resolver treats them as ENV references.
 message AuthConfig {
   oneof auth_type {
-    BearerAuth  bearer  = 1;
-    ApiKeyAuth  api_key = 2;
-    OAuth2Auth  oauth2  = 3;
-    BasicAuth   basic   = 4;
+    BearerAuth           bearer          = 1;
+    ApiKeyAuth           api_key         = 2;
+    OAuth2Auth           oauth2          = 3;
+    BasicAuth            basic           = 4;
+    ServiceAccountAuth   service_account = 5;
+    ServiceAgentAuth     service_agent   = 6;
   }
 }
 
-// Authorization: Bearer <resolved env value>
+// Where a credential value lives.
+enum SecretSource {
+  SECRET_SOURCE_UNSPECIFIED = 0;
+  ENV                       = 1;
+  HEADER                    = 2;
+  PARAMETER                 = 3;
+  GCP_SECRET                = 4;
+}
+
+message SecretRef {
+  SecretSource source = 1;
+  string       name   = 2;
+}
+
 message BearerAuth {
-  string token_env = 1;
+  SecretRef token     = 1;
+  string    token_env = 2;   // legacy — equivalent to token: {ENV, <value>}
 }
 
-// Custom header: <header_name>: <resolved env value>
 message ApiKeyAuth {
-  string header_name = 1;
-  string key_env     = 2;
+  string    header_name = 1;
+  SecretRef key         = 2;
+  string    key_env     = 3; // legacy
 }
 
-// OAuth2 client-credentials flow — token fetched automatically before each call
 message OAuth2Auth {
-  string client_id_env     = 1;
-  string client_secret_env = 2;
-  string token_url         = 3;
-  string scope             = 4;
+  SecretRef client_id         = 1;
+  SecretRef client_secret     = 2;
+  string    token_url         = 3;
+  string    scope             = 4;
+  string    client_id_env     = 5; // legacy
+  string    client_secret_env = 6; // legacy
 }
 
-// HTTP Basic auth
 message BasicAuth {
-  string username_env = 1;
-  string password_env = 2;
+  SecretRef username     = 1;
+  SecretRef password     = 2;
+  string    username_env = 3; // legacy
+  string    password_env = 4; // legacy
+}
+
+message ServiceAccountAuth {
+  SecretRef       credentials = 1;   // JSON blob or file path (ENV / GCP_SECRET)
+  repeated string scopes      = 2;
+  string          audience    = 3;
+}
+
+message ServiceAgentAuth {
+  string          target_principal = 1;  // optional — impersonation target
+  repeated string scopes           = 2;
+  string          audience         = 3;
 }

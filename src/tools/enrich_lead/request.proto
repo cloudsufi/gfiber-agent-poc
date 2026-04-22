@@ -1,7 +1,0 @@
-syntax = "proto3";
-package enrich_lead;
-
-message EnrichLeadRequest {
-  string email      = 1;
-  string company    = 2;
-}

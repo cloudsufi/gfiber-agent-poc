@@ -1,8 +1,0 @@
-syntax = "proto3";
-package check_billing;
-
-// Request schema for the check_billing tool.
-message CheckBillingRequest {
-  string customer_id = 1;
-  string period      = 2;
-}

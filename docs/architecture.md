@@ -50,9 +50,9 @@
                                        │
                                  ExecutorRouter          dispatch by handler_class
                                        │
-              ┌──────────┬──────────┬──┴──────┬────────────┬─────────┐
-              ▼          ▼          ▼         ▼            ▼         ▼
-         APIHandler  RESTHandler  MCPHandler PythonHandler GRPCHandler BigQueryHandler
+                              ┌───────────┬──┴─────────┬────────────┐
+                              ▼           ▼            ▼            ▼
+                         APIHandler  MCPHandler FunctionHandler  CTAHandler
 
 STARTUP PATH (at import):
   ToolLoader → reads every tool.yaml
@@ -100,24 +100,22 @@ src/
 │   ├── base.py                 BaseHandler ABC
 │   ├── router.py               ExecutorRouter — dispatches by handler_class
 │   ├── api_handler.py          HTTP via httpx; templated + runtime-injected headers
-│   ├── rest_handler.py         OpenAPI spec → delegates to APIHandler
-│   ├── mcp_handler.py          MCP protocol client
-│   ├── python_handler.py       Loads logic.py, calls async run()
-│   ├── grpc_handler.py         gRPC channel + stub
-│   └── bigquery_handler.py     asyncio.to_thread BigQuery query
+│   ├── mcp_handler.py          MCP protocol client (supports mock_mode)
+│   ├── function_handler.py     Loads logic.py, awaits async run(inputs)
+│   └── cta_handler.py          Dialogflow CX DetectIntent (supports mock_mode)
 │
 ├── schemas/                    Per-type config schemas (data — no __init__.py)
-│   ├── auth_config.proto       Shared AuthConfig (bearer / api_key / oauth2 / basic)
+│   ├── auth_config.proto       Shared AuthConfig + SecretRef source types
 │   ├── api_tool_config.proto
-│   ├── rest_tool_config.proto
 │   ├── mcp_tool_config.proto
-│   ├── python_tool_config.proto
-│   ├── grpc_tool_config.proto
-│   └── bigquery_tool_config.proto
+│   ├── function_tool_config.proto
+│   └── cta_tool_config.proto
 │
 └── tools/                      Your tool definitions (one folder per tool)
-    ├── check_billing/          API tool (bearer auth, GET + params)
-    └── enrich_lead/            Python tool (custom logic.py)
+    ├── weather_api/            type: api     (real HTTP + templated headers/params)
+    ├── docs_mcp/               type: mcp     (mock_mode demo)
+    ├── score_function/         type: function (local logic.py)
+    └── support_cta/            type: cta     (Dialogflow CX mock_mode demo)
 ```
 
 ---
@@ -137,7 +135,7 @@ with a human-readable error — not at first call.
 
 ### ToolTypeRegistry — `core/type_registry.py`
 A map of `type_name → (config_proto_path, handler_class)`. The default registry
-ships with `api`, `rest`, `mcp`, `python`, `grpc`, `bigquery`. Custom types
+ships with the four primary types: `api`, `mcp`, `function`, `cta`. Additional types
 register themselves via `tr.default_type_registry.register(...)` **before**
 `agent_tools` is imported.
 
@@ -181,21 +179,49 @@ All handlers extend `BaseHandler` and implement `async execute(ctx)`. They
 receive a fully-populated `ExecutionContext` and return a plain dict (which the
 proto-validation middleware then re-checks against `response.proto`).
 
-| Handler | Transport | Config proto |
-|---------|-----------|--------------|
-| `APIHandler` | HTTP via httpx | `api_tool_config.proto` |
-| `RESTHandler` | OpenAPI spec → delegates to `APIHandler` after resolving URL/method | `rest_tool_config.proto` |
-| `MCPHandler` | MCP protocol client | `mcp_tool_config.proto` |
-| `PythonHandler` | Loads `logic.py`, calls `async run(inputs)` | `python_tool_config.proto` |
-| `GRPCHandler` | gRPC channel + stub reflection | `grpc_tool_config.proto` |
-| `BigQueryHandler` | `asyncio.to_thread` BigQuery client | `bigquery_tool_config.proto` |
+| Handler | Type  | Transport | Config proto |
+|---------|-------|-----------|--------------|
+| `APIHandler`    | `api`    | HTTP via httpx — OpenAPI-style call, rich auth, templated params/headers/body | `api_tool_config.proto` |
+| `MCPHandler`    | `mcp`    | MCP protocol client. Supports `mock_mode: true` for demos. | `mcp_tool_config.proto` |
+| `FunctionHandler` | `function` | Loads `logic.py`, awaits `async run(inputs)`. | `function_tool_config.proto` |
+| `CTAHandler`    | `cta`    | Google Dialogflow CX `DetectIntent`. Supports `mock_mode: true`. | `cta_tool_config.proto` |
+
+These four are the only types registered by default. Custom types register
+themselves via `ToolTypeRegistry.register(...)` — see §9.
 
 ---
 
-## 7. Dynamic Header Injection (API / REST tools)
+## 6a. Authentication — SecretRef sources
 
-`APIHandler` assembles outgoing headers from four sources. Later sources
-override earlier ones on key conflict:
+Every credential value (`token`, `key`, `client_id`, `client_secret`,
+`username`, `password`, `credentials`) is a `SecretRef` that tells the
+runtime **where** the value lives:
+
+| `source`      | Resolved by `resolve_auth` |
+|---------------|----------------------------|
+| `ENV`         | `os.environ[<name>]` — default |
+| `HEADER`      | Inbound HTTP header from `with_request_headers(...)` / `_headers=` kwarg. Case-insensitive lookup. |
+| `PARAMETER`   | Field on the validated request proto |
+| `GCP_SECRET`  | Google Secret Manager resource: `projects/P/secrets/S/versions/V` |
+
+Two higher-level GCP auth types piggy-back on this:
+
+- **`service_account`** — JSON key from any `SecretRef`; `google.oauth2.service_account` mints an access token (or an ID token when `audience` is set).
+- **`service_agent`** — Application Default Credentials, optionally impersonating `target_principal` via `google.auth.impersonated_credentials`.
+
+Legacy string fields (`token_env`, `key_env`, `client_id_env`, …) remain
+accepted by the proto schema and are up-converted to `{source: ENV, name: …}`
+at resolve time, so pre-refactor `tool.yaml` files keep working unchanged.
+
+All auth resolution happens exactly once per call in `AuthMiddleware` —
+`ctx.resolved_auth` is then consumed by handlers to inject headers.
+
+---
+
+## 7. Dynamic Header Injection (API tools)
+
+`APIHandler` assembles outgoing headers from three **always-on** sources and
+one **opt-in** source:
 
 1. **Static values** from `tool.yaml` `headers:` map.
 2. **Templated values** in the same map.
@@ -204,24 +230,51 @@ override earlier ones on key conflict:
    - Any header whose template references an unresolved value is **skipped**
      silently — lets you declare optional trace/tenant headers.
 3. **Auth headers** injected by `AuthMiddleware` (e.g. `Authorization: Bearer …`).
-4. **Runtime-injected headers** from the agent side. Two equivalent entry points:
-   - Block-scoped via a `ContextVar` (`core/context.py`):
-     ```python
-     from agent_tools import with_request_headers, enrich_lead
-     with with_request_headers({"X-Trace-Id": trace}):
-         await enrich_lead(domain="stripe.com")
-     ```
-   - One-shot via the reserved `_headers` kwarg on the tool call:
-     ```python
-     await enrich_lead(domain="stripe.com", _headers={"X-Trace-Id": trace})
-     ```
+4. **Runtime-injected headers** from agent code — gated by the tool's
+   `runtime_headers` allow-list.
 
-Runtime-injected headers take precedence over **every** other source —
-including auth — so agents can override an `Authorization` header for testing,
-impersonation, or request-bound tokens.
+### The `runtime_headers` allow-list
 
-Template resolver: `src/handlers/api_handler.py::_render_headers`.
-Runtime context: `src/core/context.py::with_request_headers`.
+A tool must explicitly declare which header names it accepts from the
+runtime context before anything the agent passes via
+`with_request_headers(...)` or the `_headers=` kwarg reaches the wire:
+
+```yaml
+config:
+  runtime_headers:                     # opt-in. Absent/empty ⇒ feature is off.
+    - X-Trace-Id
+    - X-Tenant-Id
+    - Authorization                    # include to allow auth override
+```
+
+Comparison is case-insensitive. Any runtime-supplied header whose name is
+**not** on the list is silently dropped before the HTTP call is made. This
+keeps agent code from accidentally (or maliciously) overriding headers the
+tool didn't design for — including auth.
+
+When an allow-listed header is supplied at runtime, it **overrides** the
+corresponding yaml-templated or auth-injected value.
+
+### Entry points (on the agent side)
+
+```python
+from agent_tools import with_request_headers, weather_api
+
+# Block-scoped — applies to every tool call inside the with-block
+with with_request_headers({"X-Trace-Id": trace}):
+    await weather_api(city="London", units="metric", trace_id="t-1")
+
+# One-shot via the reserved _headers= kwarg
+await weather_api(
+    city="Tokyo", units="metric", trace_id="t-2",
+    _headers={"X-Trace-Id": trace},
+)
+```
+
+Implementation:
+- Template resolver: `src/handlers/api_handler.py::_render_headers`
+- Allow-list filter: `src/handlers/api_handler.py::_filter_runtime_headers`
+- Runtime context: `src/core/context.py::with_request_headers`
 
 ---
 

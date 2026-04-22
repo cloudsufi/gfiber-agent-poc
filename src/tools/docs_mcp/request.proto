@@ -1,0 +1,8 @@
+syntax = "proto3";
+package docs_mcp;
+
+message DocsMcpRequest {
+  string query       = 1;
+  int32  top_k       = 2;
+  string filter_tag  = 3;
+}

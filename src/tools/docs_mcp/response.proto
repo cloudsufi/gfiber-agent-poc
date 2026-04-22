@@ -1,0 +1,17 @@
+syntax = "proto3";
+package docs_mcp;
+
+message DocsMcpResponse {
+  string tool_name = 1;
+  string endpoint  = 2;
+  bool   mock      = 3;
+
+  // Structured echo of the validated request so demos can confirm the call path.
+  Echo   echo      = 4;
+
+  message Echo {
+    string query      = 1;
+    int32  top_k      = 2;
+    string filter_tag = 3;
+  }
+}

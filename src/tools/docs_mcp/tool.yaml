@@ -1,0 +1,22 @@
+name:        docs_mcp
+version:     "1.0"
+type:        mcp
+description: "Search internal documentation via an MCP server (demo runs in mock_mode)."
+
+input_schema:  request.proto
+output_schema: response.proto
+
+config:
+  endpoint:  "https://mcp.example.internal"
+  tool_name: search_documents
+  auth:
+    bearer:
+      token_env: MCP_API_KEY
+  metadata:
+    source: demo_agent
+  mock_mode: true            # flip to false once you have a real MCP server
+  timeout_seconds: 20
+
+execution:
+  retries: 0
+  timeout: 20

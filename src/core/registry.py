@@ -1,4 +1,17 @@
-"""In-memory registry mapping tool names to their ToolDefinition."""
+"""
+In-memory registry mapping tool names to their :class:`ToolDefinition`.
+
+Populated once at startup by :class:`~agent_tools.core.loader.ToolLoader`
+and consumed read-only at call time by :class:`ToolRuntime`. There's no
+deregistration API — the framework assumes a static set of tools for the
+life of the process, which is what makes the registry lock-free for
+concurrent reads.
+
+Distinct from :class:`~agent_tools.core.type_registry.ToolTypeRegistry`:
+
+* ``ToolRegistry``     — instance registry (one per process, per tool name).
+* ``ToolTypeRegistry`` — type registry   (one per process, per tool *type*).
+"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

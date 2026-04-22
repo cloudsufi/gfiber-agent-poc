@@ -1,0 +1,8 @@
+syntax = "proto3";
+package weather_api;
+
+message WeatherApiRequest {
+  string city     = 1;
+  string units    = 2;   // "metric" | "imperial"
+  string trace_id = 3;   // surfaced into X-Trace-Id request header
+}
