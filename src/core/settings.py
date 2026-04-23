@@ -28,6 +28,7 @@ All env reads happen in :meth:`Settings.load`, which is ``lru_cache``-d —
 subsequent calls return the same frozen instance. Tests clear the cache
 via :meth:`Settings._reset` between runs.
 """
+
 from __future__ import annotations
 
 import os
@@ -56,7 +57,7 @@ class Settings:
 
     @classmethod
     @lru_cache(maxsize=1)
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         """
         Read environment and return a frozen :class:`Settings` instance.
         Cached — calling this multiple times returns the same object.

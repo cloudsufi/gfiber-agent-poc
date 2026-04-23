@@ -3,8 +3,8 @@ version:     "1.0"
 type:        cta
 description: "Route a customer query to the support Dialogflow CX agent (demo runs in mock_mode)."
 
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   project_id:       demo-gcp-project

@@ -19,11 +19,12 @@ The :class:`ExecutionContext` defined in this module is the single object
 that travels through the pipeline. Each middleware mutates it (``ctx.resolved_auth``,
 ``ctx.validated_input``, ``ctx.result``) and the handler reads from it.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_tools.core.definition import ToolDefinition
 from agent_tools.core.loader import ToolLoader
@@ -31,8 +32,11 @@ from agent_tools.core.registry import ToolRegistry
 from agent_tools.core.settings import Settings
 from agent_tools.core.type_registry import ToolTypeRegistry, default_type_registry
 
+if TYPE_CHECKING:
+    from agent_tools.core.tool_context import ToolContext
 
 # ── Execution context ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class ExecutionContext:
@@ -50,22 +54,18 @@ class ExecutionContext:
         tool being invoked. Read-only by convention.
     raw_kwargs
         The kwargs the caller passed to ``await tool(**kwargs)`` — exactly
-        what the user supplied, before proto validation.
+        what the user supplied, before schema validation.
     validated_input
-        Populated by :class:`ProtoValidationMiddleware` with ``raw_kwargs``
-        after round-tripping through ``request.proto``. Unknown/typo fields
-        are rejected here; missing required fields raise. Handlers should
-        read from this, not from ``raw_kwargs``.
+        Populated by :class:`SchemaValidationMiddleware` with ``raw_kwargs``
+        after validating against the tool's ``input.yaml`` schema. Unknown
+        fields are rejected here; missing required fields raise. Handlers
+        should read from this, not from ``raw_kwargs``.
     resolved_auth
         Populated by :class:`AuthMiddleware`. Shape depends on the auth type:
         ``{"type": "bearer", "token": "..."}``,
         ``{"type": "api_key", "header": "...", "value": "..."}``,
         ``{"type": "basic", "encoded": "..."}``, or ``{}`` when no auth is
         configured.
-    proto_input
-        The compiled protobuf ``Message`` instance corresponding to
-        ``validated_input`` — handy for handlers that want to forward the
-        message over gRPC without re-encoding.
     result
         Set by the terminal router middleware to the handler's return value.
         Exposed primarily for post-handler middleware that needs to inspect
@@ -74,13 +74,14 @@ class ExecutionContext:
 
     tool_def: ToolDefinition
     raw_kwargs: dict[str, Any]
+    tool_context: ToolContext | None = None
     validated_input: dict[str, Any] = field(default_factory=dict)
     resolved_auth: dict[str, Any] = field(default_factory=dict)
-    proto_input: Any = field(default=None, repr=False)   # protobuf Message | None
     result: Any = field(default=None, repr=False)
 
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
+
 
 class ToolRuntime:
     """
@@ -119,7 +120,7 @@ class ToolRuntime:
     def from_env(
         cls,
         type_registry: ToolTypeRegistry = default_type_registry,
-    ) -> "ToolRuntime":
+    ) -> ToolRuntime:
         """
         Load all tools from ``AGENT_TOOLS_DIR`` (or the package default),
         validate their configs, and return a ready :class:`ToolRuntime`.
@@ -142,27 +143,35 @@ class ToolRuntime:
 
     # ── execution ─────────────────────────────────────────────────────────────
 
-    async def execute(self, tool_name: str, kwargs: dict[str, Any]) -> Any:
+    async def execute(
+        self,
+        tool_name: str,
+        kwargs: dict[str, Any],
+        *,
+        tool_context: ToolContext | None = None,
+    ) -> Any:
         """
         Run *tool_name* with *kwargs* through the full middleware pipeline.
 
         ``kwargs`` is what the user passed on the outside (e.g.
         ``{"customer_id": "X", "period": "2026-04"}``). It is placed on the
         fresh :class:`ExecutionContext` as ``raw_kwargs`` and then
-        :class:`ProtoValidationMiddleware` round-trips it through
-        ``request.proto`` into ``ctx.validated_input``.
+        :class:`SchemaValidationMiddleware` round-trips it through
+        ``input.yaml`` into ``ctx.validated_input``.
 
         The returned value is whatever the handler returned, after output
-        validation against ``response.proto`` (when declared; unknown fields
+        validation against ``output.yaml`` (when declared; unknown fields
         are silently dropped so external APIs that return extras still work).
 
+        :param tool_context: optional session metadata (session_id, user_id, etc.)
+            passed through the execution pipeline and into handlers.
         :raises KeyError: if *tool_name* is not registered.
-        :raises ValueError: on input / output proto validation failure.
+        :raises ValueError: on input / output schema validation failure.
         :raises Exception: anything the handler raises (bubbles up through
             the retry middleware's last attempt).
         """
         definition = self._registry.get(tool_name)
-        return await self._pipeline.run(definition, kwargs)
+        return await self._pipeline.run(definition, kwargs, tool_context=tool_context)
 
     # ── schema helpers ────────────────────────────────────────────────────────
 

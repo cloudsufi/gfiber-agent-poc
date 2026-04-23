@@ -2,10 +2,16 @@
 FunctionHandler — runs arbitrary Python logic shipped with the tool.
 
 For a tool with ``type: function``, the handler loads a sibling ``logic.py``
-file from the tool's directory, finds an ``async def run(inputs: dict) -> dict``
-function, and awaits it. The ``inputs`` dict is the merge of:
+file from the tool's directory, finds an
+``async def run(tool_context, inputs: dict) -> dict`` function, and awaits it.
 
-1. ``ctx.validated_input`` — request proto fields, already type-checked
+Arguments:
+1. ``tool_context`` — :class:`ToolContext` with session_id, user_id, event_type, timestamp
+2. ``inputs`` — merged dict of validated request fields + static ``parameters``
+
+The ``inputs`` dict is the merge of:
+
+1. ``ctx.validated_input`` — request fields, already type-checked
 2. ``ctx.tool_def.config["parameters"]`` — static values declared in
    ``tool.yaml`` (useful for threshold constants, model versions, etc.)
 
@@ -25,6 +31,7 @@ Failure modes
 * Module loads but no ``run``       → :class:`AttributeError`
 * ``run`` is not async              → ``await`` will raise ``TypeError``
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -38,18 +45,20 @@ if TYPE_CHECKING:
 
 class FunctionHandler(BaseHandler):
     """
-    Loads ``logic.py`` from the tool directory and awaits ``run(input_dict)``.
+    Loads ``logic.py`` from the tool directory and awaits ``run(tool_context, inputs)``.
 
     ``run()`` must be an async function::
 
-        async def run(inputs: dict) -> dict:
+        async def run(tool_context, inputs: dict) -> dict:
+            # tool_context carries session_id, user_id, event_type, timestamp
+            # inputs merges validated request fields with static parameters
             ...
 
-    ``inputs`` merges the validated request proto fields with the static
+    ``inputs`` merges the validated request fields with the static
     ``parameters`` map from ``tool.yaml``.
     """
 
-    async def execute(self, ctx: "ExecutionContext") -> Any:
+    async def execute(self, ctx: ExecutionContext) -> Any:
         if ctx.tool_def.tool_dir is None:
             raise ValueError(
                 f"Tool '{ctx.tool_def.name}' has no tool_dir set — cannot load logic.py"
@@ -71,11 +80,11 @@ class FunctionHandler(BaseHandler):
         if not hasattr(module, "run"):
             raise AttributeError(
                 f"logic.py for tool '{ctx.tool_def.name}' must define an async "
-                f"``run(inputs)`` function."
+                f"``run(tool_context, inputs)`` function."
             )
 
         call_input = {
             **ctx.validated_input,
             **ctx.tool_def.config.get("parameters", {}),
         }
-        return await module.run(call_input)
+        return await module.run(ctx.tool_context, call_input)

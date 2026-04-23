@@ -42,11 +42,13 @@ HTTP semantics
   the retry middleware may retry depending on the tool's ``retries``
   setting.
 """
+
 from __future__ import annotations
 
 import os
 import re
-from typing import TYPE_CHECKING, Any, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from agent_tools.core.context import current_request_headers
 from agent_tools.handlers.base import BaseHandler
@@ -76,7 +78,7 @@ class APIHandler(BaseHandler):
        Without that declaration, runtime headers are ignored entirely.
     """
 
-    async def execute(self, ctx: "ExecutionContext") -> Any:
+    async def execute(self, ctx: ExecutionContext) -> Any:
         import httpx
 
         cfg = ctx.tool_def.config

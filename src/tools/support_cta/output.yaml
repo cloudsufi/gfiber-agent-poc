@@ -1,0 +1,10 @@
+type: object
+properties:
+  session_id:     { type: string }
+  language_code:  { type: string }
+  agent_response: { type: string }
+  intent:         { type: string }
+  confidence:     { type: number }
+  parameters:
+    type: object
+    additionalProperties: { type: string }

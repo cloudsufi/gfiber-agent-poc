@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make lint *)",
+      "Bash(ruff check *)",
+      "Bash(mypy src *)",
+      "Bash(grep -E \"error:|notes:|^$\")",
+      "Bash(pytest tests *)",
+      "Bash(python test_agent/demo.py)",
+      "Bash(ruff format *)",
+      "Bash(make check *)"
+    ]
+  }
+}

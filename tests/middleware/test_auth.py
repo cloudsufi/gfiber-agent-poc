@@ -1,14 +1,14 @@
 """Unit tests for agent_tools.middleware.auth."""
+
 from __future__ import annotations
 
-import os
 import base64
 
 import pytest
-
 from agent_tools.middleware.auth import resolve_auth
 
 
+from agent_tools.core.tool_context import ToolContext
 class TestResolveAuth:
     def test_empty_returns_empty(self):
         assert resolve_auth({}) == {}
@@ -45,7 +45,9 @@ class TestAuthMiddleware:
         monkeypatch.setenv("TEST_API_KEY", "tok-xyz")
         mock_tool_definition.config["auth"] = {"bearer": {"token_env": "TEST_API_KEY"}}
 
-        ctx = ExecutionContext(tool_def=mock_tool_definition, raw_kwargs={})
+        ctx = ExecutionContext(
+            tool_context=ToolContext(),
+            tool_def=mock_tool_definition, raw_kwargs={})
         results = []
 
         async def capture(c):

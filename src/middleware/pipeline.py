@@ -11,14 +11,14 @@ Default order (outermost → innermost)::
 
     AuthMiddleware              ← resolves credentials once per call
     RetryMiddleware             ← retries the inner chain on exception
-    ProtoValidationMiddleware   ← validates input + output against proto
+    SchemaValidationMiddleware  ← validates input + output against YAML schema
     LoggingMiddleware           ← structured before/after log lines
     ExecutorRouter              ← terminal: dispatches to the handler
 
 Why this specific order
 -----------------------
 * **Auth outside retry** — one OAuth token per call, not per attempt.
-* **Retry outside proto validation** — a 5xx from the service triggers a
+* **Retry outside schema validation** — a 5xx from the service triggers a
   retry; a malformed request does not (it raises at validation and never
   reaches the handler).
 * **Logging innermost above the router** — the reported timing is the
@@ -29,14 +29,19 @@ Extensibility
 To add a new middleware, subclass or compose with something exposing
 ``wrap(next_fn)`` and add it to :meth:`build` in the right position.
 """
+
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from agent_tools.core.definition import ToolDefinition
 from agent_tools.core.settings import Settings
 
-Next = Callable[..., Any]   # async (ExecutionContext) -> Any
+if TYPE_CHECKING:
+    from agent_tools.core.tool_context import ToolContext
+
+Next = Callable[..., Any]  # async (ExecutionContext) -> Any
 
 
 class MiddlewarePipeline:
@@ -52,7 +57,7 @@ class MiddlewarePipeline:
         self._middlewares = middlewares
 
     @classmethod
-    def build(cls, settings: Settings) -> "MiddlewarePipeline":
+    def build(cls, settings: Settings) -> MiddlewarePipeline:
         """
         Construct the default pipeline with all built-in middleware.
 
@@ -63,20 +68,26 @@ class MiddlewarePipeline:
         from agent_tools.handlers.router import ExecutorRouter
         from agent_tools.middleware.auth import AuthMiddleware
         from agent_tools.middleware.logging import LoggingMiddleware
-        from agent_tools.middleware.proto_validation import ProtoValidationMiddleware
         from agent_tools.middleware.retry import RetryMiddleware
+        from agent_tools.middleware.schema_validation import SchemaValidationMiddleware
 
         return cls(
             [
                 AuthMiddleware(),
                 RetryMiddleware(settings),
-                ProtoValidationMiddleware(),
+                SchemaValidationMiddleware(),
                 LoggingMiddleware(settings),
                 ExecutorRouter(),
             ]
         )
 
-    async def run(self, tool_def: ToolDefinition, kwargs: dict[str, Any]) -> Any:
+    async def run(
+        self,
+        tool_def: ToolDefinition,
+        kwargs: dict[str, Any],
+        *,
+        tool_context: ToolContext | None = None,
+    ) -> Any:
         """
         Execute *kwargs* through the full middleware chain for *tool_def*.
 
@@ -90,10 +101,14 @@ class MiddlewarePipeline:
         included in the middleware list, the chain would end without a
         handler ever being called. The terminal raises instead of silently
         returning ``None``.
+
+        :param tool_context: optional session metadata to pass through the pipeline.
         """
         from agent_tools.core.runtime import ExecutionContext
 
-        ctx = ExecutionContext(tool_def=tool_def, raw_kwargs=kwargs)
+        ctx = ExecutionContext(
+            tool_def=tool_def, raw_kwargs=kwargs, tool_context=tool_context
+        )
 
         async def terminal(c: ExecutionContext) -> Any:  # type: ignore[misc]
             raise RuntimeError("Pipeline ended without a handler — check ExecutorRouter.")

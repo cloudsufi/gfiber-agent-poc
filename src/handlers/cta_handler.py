@@ -38,6 +38,7 @@ Graceful degradation
 * SDK not installed (``google-cloud-dialogflowcx``) → log-and-fallback to
   the same stub shape, so an agent demo still runs.
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,7 +54,7 @@ log = logging.getLogger("agent_tools.handlers.cta")
 
 
 class CTAHandler(BaseHandler):
-    async def execute(self, ctx: "ExecutionContext") -> Any:
+    async def execute(self, ctx: ExecutionContext) -> Any:
         cfg = ctx.tool_def.config
         inputs = ctx.validated_input
 
@@ -91,12 +92,12 @@ def _mock_response(
 ) -> dict[str, Any]:
     """Deterministic stub used when mock_mode is true or the SDK is unavailable."""
     return {
-        "session_id":     session_id,
-        "language_code":  cfg.get("language_code", "en"),
+        "session_id": session_id,
+        "language_code": cfg.get("language_code", "en"),
         "agent_response": f"[mock cta:{tool_name}] You said: {text}",
-        "intent":         "mock.echo",
-        "confidence":     1.0,
-        "parameters":     {},
+        "intent": "mock.echo",
+        "confidence": 1.0,
+        "parameters": {},
     }
 
 
@@ -111,9 +112,9 @@ async def _call_dialogflow_cx(
     """Hit the real Dialogflow CX agent. Runs on a thread because the SDK is sync."""
     try:
         from google.cloud.dialogflowcx_v3 import (  # type: ignore
-            SessionsClient,
             DetectIntentRequest,
             QueryInput,
+            SessionsClient,
             TextInput,
         )
     except ImportError:
@@ -145,9 +146,7 @@ async def _call_dialogflow_cx(
 
             client_opts["credentials"] = _StaticBearer(bearer)
 
-        client = SessionsClient(
-            client_options=client_opts if client_opts else None
-        )
+        client = SessionsClient(client_options=client_opts if client_opts else None)
 
         session = (
             f"projects/{cfg['project_id']}/locations/{cfg['location']}"
@@ -176,12 +175,12 @@ async def _call_dialogflow_cx(
             confidence = float(result.intent_detection_confidence or 0.0)
 
         return {
-            "session_id":     session_id,
-            "language_code":  result.language_code or cfg.get("language_code", "en"),
+            "session_id": session_id,
+            "language_code": result.language_code or cfg.get("language_code", "en"),
             "agent_response": fulfillment,
-            "intent":         intent_name,
-            "confidence":     confidence,
-            "parameters":     dict(result.parameters or {}),
+            "intent": intent_name,
+            "confidence": confidence,
+            "parameters": dict(result.parameters or {}),
         }
 
     return await asyncio.to_thread(_run)

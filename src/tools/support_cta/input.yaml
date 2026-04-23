@@ -1,0 +1,6 @@
+type: object
+additionalProperties: false
+required: [text]
+properties:
+  text:       { type: string, description: "User utterance sent to the CX agent." }
+  session_id: { type: string, description: "Optional — stable id for multi-turn." }

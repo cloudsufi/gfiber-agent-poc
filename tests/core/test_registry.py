@@ -1,8 +1,8 @@
 """Unit tests for agent_tools.core.registry."""
+
 from __future__ import annotations
 
 import pytest
-
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
 from agent_tools.core.registry import ToolRegistry
 from agent_tools.handlers.api_handler import APIHandler

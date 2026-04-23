@@ -1,4 +1,5 @@
 """Tests for the new SecretRef-based auth resolver paths."""
+
 from __future__ import annotations
 
 import base64
@@ -10,9 +11,7 @@ from agent_tools.middleware.auth import resolve_auth
 class TestSecretRefSources:
     def test_env_source_explicit(self, monkeypatch):
         monkeypatch.setenv("MY_TOKEN", "env-value")
-        result = resolve_auth(
-            {"bearer": {"token": {"source": "ENV", "name": "MY_TOKEN"}}}
-        )
+        result = resolve_auth({"bearer": {"token": {"source": "ENV", "name": "MY_TOKEN"}}})
         assert result == {"type": "bearer", "token": "env-value"}
 
     def test_header_source(self):
@@ -64,9 +63,7 @@ class TestSecretRefSources:
 class TestLegacyAndNewCoexist:
     def test_legacy_api_key_still_works(self, monkeypatch):
         monkeypatch.setenv("MY_KEY", "legacy-value")
-        result = resolve_auth(
-            {"api_key": {"header_name": "X-Api-Key", "key_env": "MY_KEY"}}
-        )
+        result = resolve_auth({"api_key": {"header_name": "X-Api-Key", "key_env": "MY_KEY"}})
         assert result == {"type": "api_key", "header": "X-Api-Key", "value": "legacy-value"}
 
     def test_new_api_key_with_secret_ref(self, monkeypatch):
@@ -84,9 +81,7 @@ class TestLegacyAndNewCoexist:
     def test_basic_legacy_fields(self, monkeypatch):
         monkeypatch.setenv("U", "alice")
         monkeypatch.setenv("P", "hunter2")
-        result = resolve_auth(
-            {"basic": {"username_env": "U", "password_env": "P"}}
-        )
+        result = resolve_auth({"basic": {"username_env": "U", "password_env": "P"}})
         expected = base64.b64encode(b"alice:hunter2").decode()
         assert result == {"type": "basic", "encoded": expected}
 

@@ -1,9 +1,10 @@
 """Unit tests for agent_tools.core.function."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
 from agent_tools.core.function import ToolFunction
 from agent_tools.core.registry import ToolRegistry
@@ -48,10 +49,17 @@ class TestToolFunction:
 
     @pytest.mark.asyncio
     async def test_call_delegates_to_runtime(self):
+        from agent_tools.core.tool_context import ToolContext
+
         rt = _make_runtime_with_tools(["alpha"])
         fn = ToolFunction("alpha", rt)
-        result = await fn(x=1, y=2)
-        rt.execute.assert_called_once_with("alpha", {"x": 1, "y": 2})
+        tc = ToolContext()
+        result = await fn(tc, x=1, y=2)
+        # Check that execute was called with tool_context kwarg
+        assert rt.execute.call_count == 1
+        call_args = rt.execute.call_args
+        assert call_args[0] == ("alpha", {"x": 1, "y": 2})
+        assert call_args[1]["tool_context"] is tc
         assert result == {"ok": True}
 
     def test_schema_property(self):

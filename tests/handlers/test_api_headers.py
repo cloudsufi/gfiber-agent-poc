@@ -1,11 +1,12 @@
 """Dynamic header injection — env vars, request fields, runtime opt-in overrides."""
+
 from __future__ import annotations
 
 import httpx
 import pytest
 import respx
-
 from agent_tools.core.context import with_request_headers
+from agent_tools.core.tool_context import ToolContext
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
 from agent_tools.core.runtime import ExecutionContext
 from agent_tools.handlers.api_handler import (
@@ -13,7 +14,6 @@ from agent_tools.handlers.api_handler import (
     _filter_runtime_headers,
     _render_headers,
 )
-
 
 URL = "https://api.example.com/v1/data"
 
@@ -48,14 +48,13 @@ def _ctx(
         raw_kwargs=validated or {},
         validated_input=validated or {},
         resolved_auth=auth or {},
-    )
+            tool_context=ToolContext(),
+        )
 
 
 class TestRenderHeaders:
     def test_literal_value_passthrough(self):
-        assert _render_headers({"Accept": "application/json"}, {}) == {
-            "Accept": "application/json"
-        }
+        assert _render_headers({"Accept": "application/json"}, {}) == {"Accept": "application/json"}
 
     def test_field_substitution(self):
         out = _render_headers({"X-Tenant": "{{tenant}}"}, {"tenant": "acme"})
@@ -72,9 +71,7 @@ class TestRenderHeaders:
 
     def test_missing_env_skips_header(self, monkeypatch):
         monkeypatch.delenv("NOT_SET", raising=False)
-        out = _render_headers(
-            {"X-App-Id": "{{env:NOT_SET}}", "Accept": "json"}, {}
-        )
+        out = _render_headers({"X-App-Id": "{{env:NOT_SET}}", "Accept": "json"}, {})
         assert out == {"Accept": "json"}
 
     def test_mixed_tokens_in_one_value(self, monkeypatch):
@@ -92,14 +89,10 @@ class TestFilterRuntimeHeaders:
         assert _filter_runtime_headers({"X-Trace-Id": "v"}, None) == {}
 
     def test_allow_listed_header_passes(self):
-        assert _filter_runtime_headers(
-            {"X-Trace-Id": "v"}, ["X-Trace-Id"]
-        ) == {"X-Trace-Id": "v"}
+        assert _filter_runtime_headers({"X-Trace-Id": "v"}, ["X-Trace-Id"]) == {"X-Trace-Id": "v"}
 
     def test_comparison_is_case_insensitive(self):
-        assert _filter_runtime_headers(
-            {"x-trace-id": "v"}, ["X-TRACE-ID"]
-        ) == {"x-trace-id": "v"}
+        assert _filter_runtime_headers({"x-trace-id": "v"}, ["X-TRACE-ID"]) == {"x-trace-id": "v"}
 
     def test_non_allow_listed_dropped(self):
         assert _filter_runtime_headers(
@@ -168,9 +161,7 @@ class TestRuntimeHeaderGating:
         """A header the agent tried to inject but the tool didn't declare is ignored."""
         route = respx.get(URL).mock(return_value=httpx.Response(200, json={}))
         ctx = _ctx(runtime_headers=["X-Trace-Id"])
-        with with_request_headers(
-            {"X-Trace-Id": "ok", "X-Secret": "should-not-leak"}
-        ):
+        with with_request_headers({"X-Trace-Id": "ok", "X-Secret": "should-not-leak"}):
             await APIHandler().execute(ctx)
         assert route.calls[0].request.headers.get("X-Trace-Id") == "ok"
         assert "x-secret" not in route.calls[0].request.headers

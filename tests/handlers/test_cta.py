@@ -1,9 +1,10 @@
 """Unit tests for the CTA (Dialogflow CX) handler."""
+
 from __future__ import annotations
 
 import pytest
-
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
+from agent_tools.core.tool_context import ToolContext
 from agent_tools.core.runtime import ExecutionContext
 from agent_tools.handlers.cta_handler import CTAHandler
 
@@ -22,7 +23,8 @@ def _ctx(cfg: dict, validated: dict | None = None) -> ExecutionContext:
         tool_def=defn,
         raw_kwargs=validated or {},
         validated_input=validated or {},
-    )
+            tool_context=ToolContext(),
+        )
 
 
 class TestCTAHandlerMockMode:

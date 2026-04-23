@@ -49,3 +49,5 @@ pytest-cache-files-*/
 *.swp
 *.swo
 Thumbs.db
+.mypy_cache
+.ruff_cache

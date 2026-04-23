@@ -3,8 +3,8 @@ version:     "1.0"
 type:        function
 description: "Score a lead using local business rules — no external calls."
 
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   # Static inputs merged into the run() call alongside validated request fields.

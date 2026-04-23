@@ -5,11 +5,11 @@ This subpackage owns everything that happens between "the framework imports"
 and "a tool is ready to be called"::
 
     Settings.load()              ← env-var config
-    ToolTypeRegistry             ← {type name → (proto path, handler class)}
+    ToolTypeRegistry             ← {type name → (config schema path, handler class)}
     ToolLoader.load_all()        ← scan tools/ dir
       ├─ reads tool.yaml
-      ├─ ConfigValidator         ← proto-validates config: block
-      └─ ProtoLoader             ← compiles request/response.proto
+      ├─ ConfigValidator         ← validates config: block
+      └─ SchemaLoader            ← loads input/output.yaml
     ToolRegistry.register()      ← {tool name → ToolDefinition}
     ToolRuntime(registry, …)     ← builds MiddlewarePipeline
     ToolFunction(name, runtime)  ← awaitable callable per tool
@@ -20,7 +20,7 @@ Public surface
 * :class:`~agent_tools.core.function.ToolFunction` — the awaitable wrapper
   every tool-name import resolves to.
 * :class:`~agent_tools.core.definition.ToolDefinition` — the frozen shape of a
-  validated tool, with its request/response protos attached.
+  validated tool, with its input/output schemas attached.
 * :class:`~agent_tools.core.type_registry.ToolTypeRegistry` — registration API
   for adding new tool types without modifying framework code.
 * :class:`~agent_tools.core.context.with_request_headers` — opt-in dynamic

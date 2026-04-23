@@ -11,7 +11,7 @@ Execution order (outermost → innermost, i.e. the request's path)::
 
     AuthMiddleware            # resolves credentials once per call
         └── RetryMiddleware           # exponential backoff on exceptions
-            └── ProtoValidationMiddleware  # validates input + output
+            └── SchemaValidationMiddleware  # validates input + output
                 └── LoggingMiddleware          # wall-clock + status
                     └── ExecutorRouter             # picks handler, awaits it
 
@@ -38,5 +38,5 @@ Adding a middleware
 2. Append it to :meth:`MiddlewarePipeline.build`. Position carefully relative
    to the existing links — e.g. a "tenant" middleware that enriches logs
    should sit outside LoggingMiddleware; a "caching" middleware should sit
-   inside ProtoValidationMiddleware so cached payloads round-trip cleanly.
+   inside SchemaValidationMiddleware so cached payloads round-trip cleanly.
 """

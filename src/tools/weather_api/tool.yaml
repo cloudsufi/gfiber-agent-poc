@@ -3,8 +3,8 @@ version:     "1.0"
 type:        api
 description: "Return current weather for a city (demo uses httpbin.org/anything to echo the call)."
 
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   endpoint: "https://httpbin.org/anything"
@@ -17,7 +17,7 @@ config:
   headers:
     Accept:       application/json
     X-Agent-Env:  "{{env:AGENT_ENV}}"     # from process env (optional — skipped if unset)
-    X-Trace-Id:   "{{trace_id}}"          # from request proto field
+    X-Trace-Id:   "{{trace_id}}"          # from request field
 
   # Explicit opt-in: names below may also be supplied by the agent runtime
   # via ``with_request_headers(...)`` or the ``_headers=`` kwarg. Any other

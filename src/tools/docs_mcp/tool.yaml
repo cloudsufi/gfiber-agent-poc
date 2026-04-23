@@ -3,8 +3,8 @@ version:     "1.0"
 type:        mcp
 description: "Search internal documentation via an MCP server (demo runs in mock_mode)."
 
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   endpoint:  "https://mcp.example.internal"

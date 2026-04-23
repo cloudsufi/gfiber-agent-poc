@@ -35,7 +35,7 @@ python test_agent/demo.py --adk
 ## Use your own tool
 
 Drop a folder into `src/tools/<your_tool>/` with a `tool.yaml` (+ optional
-`request.proto` / `response.proto` / `logic.py`). Re-run `python
+`input.yaml` / `output.yaml` / `logic.py`). Re-run `python
 test_agent/demo.py` — your tool appears in `all_tools()` and `all_schemas()`
 automatically. No code changes to `agent.py` or `demo.py` needed.
 

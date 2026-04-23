@@ -20,6 +20,7 @@ The ``mcp`` package is an optional install — it's only imported when a
 real call is attempted, so mock-mode MCP tools work even without it
 installed.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -40,19 +41,19 @@ class MCPHandler(BaseHandler):
     extra: ``pip install "ai-agent-shared-tools[mcp]"``.
     """
 
-    async def execute(self, ctx: "ExecutionContext") -> Any:
+    async def execute(self, ctx: ExecutionContext) -> Any:
         cfg = ctx.tool_def.config
 
         if cfg.get("mock_mode"):
             return {
                 "tool_name": cfg.get("tool_name", ""),
-                "endpoint":  cfg.get("endpoint", ""),
-                "echo":      dict(ctx.validated_input),
-                "mock":      True,
+                "endpoint": cfg.get("endpoint", ""),
+                "echo": dict(ctx.validated_input),
+                "mock": True,
             }
 
         try:
-            from mcp import Client  # type: ignore[import]
+            from mcp import Client  # type: ignore[attr-defined]
         except ImportError as exc:
             raise ImportError(
                 "The 'mcp' package is required for MCP tools. "

@@ -1,12 +1,9 @@
 """Unit tests for agent_tools.core.settings."""
+
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
-
-from agent_tools.core.settings import Settings, _PACKAGE_ROOT
+from agent_tools.core.settings import _PACKAGE_ROOT, Settings
 
 
 class TestSettings:

@@ -5,18 +5,19 @@ A handler is the strategy that actually invokes the tool. The framework
 routes to it through :class:`ExecutorRouter` — the terminal middleware —
 so by the time ``execute`` runs:
 
-* ``ctx.validated_input`` has passed the ``request.proto`` round-trip.
+* ``ctx.validated_input`` has passed the ``input.yaml`` round-trip.
 * ``ctx.resolved_auth`` has been populated by :class:`AuthMiddleware`.
 * ``ctx.tool_def.config`` is the normalized yaml config (validated against
-  the type's config proto).
+  the type's config schema).
 * Retries and logging wrap the call from outside — individual handlers
   never need to implement either concern.
 
 The return value is whatever is semantically right for the tool; it flows
-back through :class:`ProtoValidationMiddleware`, which round-trips it
-through ``response.proto`` (when declared), dropping unknown fields so an
+back through :class:`SchemaValidationMiddleware`, which round-trips it
+through ``output.yaml`` (when declared), dropping unknown fields so an
 external API's extra payload keys don't break the contract.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -37,7 +38,7 @@ class BaseHandler(ABC):
     """
 
     @abstractmethod
-    async def execute(self, ctx: "ExecutionContext") -> Any:
+    async def execute(self, ctx: ExecutionContext) -> Any:
         """
         Execute the tool and return its result.
 
@@ -45,7 +46,7 @@ class BaseHandler(ABC):
             from ``ctx.tool_def.config``, input from ``ctx.validated_input``,
             credentials from ``ctx.resolved_auth``.
         :returns: A JSON-serialisable value. When the tool declares a
-            ``response.proto``, this is validated by the middleware before
+            ``output.yaml``, this is validated by the middleware before
             the caller sees it; unknown response fields are dropped rather
             than raising.
         :raises Exception: Any error is caught by :class:`RetryMiddleware`

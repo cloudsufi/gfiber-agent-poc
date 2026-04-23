@@ -1,14 +1,14 @@
 """Tests for {{field}} / {{env:VAR}} templating in params and body."""
+
 from __future__ import annotations
 
 import httpx
 import pytest
 import respx
-
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
+from agent_tools.core.tool_context import ToolContext
 from agent_tools.core.runtime import ExecutionContext
 from agent_tools.handlers.api_handler import APIHandler
-
 
 URL = "https://api.example.com/v1/resource"
 
@@ -42,7 +42,8 @@ def _ctx(
         tool_def=defn,
         raw_kwargs=validated or {},
         validated_input=validated or {},
-    )
+            tool_context=ToolContext(),
+        )
 
 
 class TestParamsTemplating:
@@ -84,5 +85,6 @@ class TestBodyTemplating:
         )
         await APIHandler().execute(ctx)
         import json as j
+
         body = j.loads(route.calls[0].request.content.decode())
         assert body == {"id": "ID-42", "action": "run"}

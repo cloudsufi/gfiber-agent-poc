@@ -1,9 +1,9 @@
 # ai-agent-shared-tools
 
-> **Proto-first, config-driven tool framework for ADK agents.**
-> Every tool is a folder on disk: declarative `tool.yaml` for configuration,
-> `.proto` files for schema + config validation. Import and call each tool
-> like an ordinary async function.
+> **YAML-first, config-driven tool framework for ADK agents.**
+> Every tool is a folder on disk: `tool.yaml` for configuration,
+> `input.yaml` / `output.yaml` for JSON-Schema validation of inputs /
+> outputs. Import and call each tool like an ordinary async function.
 
 ```python
 from agent_tools import weather_api
@@ -75,10 +75,10 @@ Actions workflow template see [docs/architecture.md#packaging--releases](docs/ar
 
 | Type | Handler | When to use | Config schema |
 |------|---------|-------------|---------------|
-| `api`    | HTTP via httpx | OpenAPI-style call to any REST service | [api_tool_config.proto](src/schemas/api_tool_config.proto) |
-| `mcp`    | MCP client | Delegates to an MCP server's named tool | [mcp_tool_config.proto](src/schemas/mcp_tool_config.proto) |
-| `function` | Runs `logic.py` | Anything that's pure Python logic | [function_tool_config.proto](src/schemas/function_tool_config.proto) |
-| `cta`    | Dialogflow CX | Route an utterance through a Google conversational agent | [cta_tool_config.proto](src/schemas/cta_tool_config.proto) |
+| `api`    | HTTP via httpx | OpenAPI-style call to any REST service | [api_tool_config.yaml](src/schema/types/api_tool_config.yaml) |
+| `mcp`    | MCP client | Delegates to an MCP server's named tool | [mcp_tool_config.yaml](src/schema/types/mcp_tool_config.yaml) |
+| `function` | Runs `logic.py` | Anything that's pure Python logic | [function_tool_config.yaml](src/schema/types/function_tool_config.yaml) |
+| `cta`    | Dialogflow CX | Route an utterance through a Google conversational agent | [cta_tool_config.yaml](src/schema/types/cta_tool_config.yaml) |
 
 `mcp` and `cta` both support `mock_mode: true` — returns a deterministic stub
 so you can develop and demo without a running MCP server or CX agent.
@@ -94,9 +94,9 @@ Every tool is a directory under `src/tools/<tool_name>/`:
 
 ```
 src/tools/weather_api/
-├── tool.yaml          # config — validated against the type's .proto at load time
-├── request.proto      # input schema — validates kwargs at call time
-└── response.proto     # output schema — validates handler result at call time
+├── tool.yaml         # config — validated against the type's YAML schema at load time
+├── input.yaml        # JSON Schema for kwargs — validates at call time
+└── output.yaml       # JSON Schema for handler result — validates at call time
 ```
 
 A fourth file, `logic.py`, is required only for `type: function`.
@@ -110,8 +110,8 @@ version:     "1.0"
 type:        api
 description: "Return current weather for a city."
 
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   endpoint: "https://api.example.com/v1/weather"
@@ -138,16 +138,15 @@ execution:
   timeout: 10
 ```
 
-```proto
-// request.proto
-syntax = "proto3";
-package weather_api;
-
-message WeatherApiRequest {
-  string city     = 1;
-  string units    = 2;
-  string trace_id = 3;
-}
+```yaml
+# input.yaml
+type: object
+additionalProperties: false
+required: [city, units, trace_id]
+properties:
+  city:     { type: string }
+  units:    { type: string, enum: [metric, imperial] }
+  trace_id: { type: string }
 ```
 
 Import and call:
@@ -163,8 +162,8 @@ result = await weather_api(city="London", units="metric", trace_id="t-1")
 name:        score_function
 type:        function
 description: "Score a lead using local business rules."
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   parameters:                         # static values merged into run() inputs
@@ -186,8 +185,8 @@ async def run(inputs: dict) -> dict:
 name:        support_cta
 type:        cta
 description: "Route a query to the support Dialogflow CX agent."
-input_schema:  request.proto
-output_schema: response.proto
+input_schema:  input.yaml
+output_schema: output.yaml
 
 config:
   project_id:       my-gcp-project
@@ -233,7 +232,7 @@ that names its source:
 |-------------|----------------------------------------------------|
 | `ENV`       | `os.environ[<name>]` — default                    |
 | `HEADER`    | Inbound HTTP header (caller-supplied, per-call)    |
-| `PARAMETER` | Request proto input field                          |
+| `PARAMETER` | Field on the validated request input               |
 | `GCP_SECRET`| Google Secret Manager resource name                |
 
 ### Auth types
@@ -291,7 +290,7 @@ Headers applied to an outgoing API request come from three sources (last wins):
 
 1. Static `headers:` from `tool.yaml`
 2. Templated values in the same map:
-   - `{{field}}` — request proto field
+   - `{{field}}` — validated request field
    - `{{env:VAR}}` — process env (header is silently skipped if var is unset)
 3. Auth headers injected by `AuthMiddleware`
 
@@ -375,7 +374,7 @@ See [test_agent/](test_agent/) for the full working adapter + runnable demo.
 
 ```bash
 make install        # pip install -e ".[dev]"
-make test           # pytest — 131 tests cover core + handlers + middleware + proto
+make test           # pytest — 142 tests cover core + handlers + middleware + schema
 make test-cov       # with coverage report
 make lint           # ruff check + format
 make typecheck      # mypy

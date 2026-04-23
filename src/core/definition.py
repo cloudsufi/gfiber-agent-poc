@@ -1,18 +1,19 @@
 """
 Core data-classes that describe a tool's fully-resolved contract.
 
-Three dataclasses live here; together they are the "compiled form" of a
+Three dataclasses live here; together they are the "loaded form" of a
 tool — everything the runtime needs to dispatch a call without re-reading
-the tool.yaml / .proto files from disk.
+the tool.yaml / schema files from disk.
 
 * :class:`ExecutionConfig` — per-tool retry / timeout overrides with sentinel
   values that resolve to the global :class:`Settings` defaults at call time.
 * :class:`ToolTypeEntry` — what the type registry stores for each type name:
-  a path to the config schema and a handler class.
+  a path to the config schema YAML and a handler class.
 * :class:`ToolDefinition` — the big one. One instance per registered tool,
-  produced by :class:`~agent_tools.core.loader.ToolLoader` after proto
+  produced by :class:`~agent_tools.core.loader.ToolLoader` after schema
   validation passes.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -21,7 +22,6 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent_tools.core.settings import Settings
-    from agent_tools.proto.descriptor import ProtoDescriptor
 
 
 @dataclass
@@ -36,7 +36,7 @@ class ExecutionConfig:
     retries: int = -1
     timeout: int = -1
 
-    def resolved(self, settings: "Settings") -> "ExecutionConfig":
+    def resolved(self, settings: Settings) -> ExecutionConfig:
         """Return a new :class:`ExecutionConfig` with sentinels replaced."""
         return ExecutionConfig(
             retries=self.retries if self.retries >= 0 else settings.default_retries,
@@ -49,7 +49,7 @@ class ToolTypeEntry:
     """Associates a tool type name with its config schema path and handler class."""
 
     name: str
-    config_proto_path: Path
+    config_schema_path: Path
     handler_class: Any  # type: ignore[misc]
 
 
@@ -60,8 +60,8 @@ class ToolDefinition:
 
     Created by :class:`~agent_tools.core.loader.ToolLoader` at startup. Once
     a ``ToolDefinition`` exists, the tool is guaranteed callable — its
-    config has been parsed through the type's ``.proto`` schema, and its
-    request/response protos (if present) have been compiled.
+    config has been validated against the type's YAML schema, and its
+    request/response schemas (if present) have been loaded.
 
     Fields
     ------
@@ -72,19 +72,18 @@ class ToolDefinition:
         Copied from ``tool.yaml``. ``type`` must correspond to an entry
         in :class:`ToolTypeRegistry`.
     config
-        The YAML ``config:`` block **after** proto round-trip — field names
-        are normalized, unknown keys have been rejected, and types are
-        guaranteed to match the type's ``.proto`` schema.
+        The YAML ``config:`` block **after** schema validation — unknown
+        keys have been rejected, required fields verified, types enforced.
     execution
         Per-tool retry / timeout overrides. See :class:`ExecutionConfig`.
     handler_class
         The :class:`BaseHandler` subclass that will execute this tool. The
         router instantiates it lazily on first use and caches the instance.
-    proto_input / proto_output
-        Compiled :class:`ProtoDescriptor` wrappers, or ``None`` if the tool
-        didn't ship a ``request.proto`` / ``response.proto``. Used by
-        :class:`ProtoValidationMiddleware` to enforce the contract at call
-        time.
+    input_schema / output_schema
+        Parsed JSON Schema dicts, or ``None`` if the tool didn't ship a
+        ``request.yaml`` / ``response.yaml``. Used by
+        :class:`SchemaValidationMiddleware` to enforce the contract at
+        call time.
     tool_dir
         Filesystem path to the tool's directory. Used by handlers that
         need to load sibling files (e.g. ``FunctionHandler`` loading
@@ -98,8 +97,8 @@ class ToolDefinition:
     config: dict[str, Any]
     execution: ExecutionConfig
     handler_class: Any  # type: ignore[misc]
-    proto_input: "ProtoDescriptor | None" = field(default=None, repr=False)
-    proto_output: "ProtoDescriptor | None" = field(default=None, repr=False)
+    input_schema: dict[str, Any] | None = field(default=None, repr=False)
+    output_schema: dict[str, Any] | None = field(default=None, repr=False)
     tool_dir: Path | None = None
 
     @property
@@ -113,24 +112,19 @@ class ToolDefinition:
             {
                 "name":        <tool name>,
                 "description": <from tool.yaml>,
-                "parameters":  <JSON Schema derived from request.proto>,
+                "parameters":  <JSON Schema derived from request.yaml>,
             }
 
-        Derived automatically from ``request.proto`` via
-        :class:`ProtoSchemaConverter`. If the tool didn't declare a request
-        proto, the ``parameters`` block is an empty object.
-
-        Recomputed on every access — cheap because the descriptor is cached.
+        The ``parameters`` block is the tool's ``input_schema`` with
+        framework-internal metadata (``$schema``, ``title``) stripped so
+        it can be attached directly to an ADK ``FunctionDeclaration``.
+        If the tool didn't declare a request schema, ``parameters`` is an
+        empty object.
         """
-        from agent_tools.proto.converter import ProtoSchemaConverter
+        from agent_tools.schema.converter import to_llm_schema
 
-        params = (
-            ProtoSchemaConverter.to_json_schema(self.proto_input)
-            if self.proto_input
-            else {"type": "object", "properties": {}}
-        )
         return {
             "name": self.name,
             "description": self.description,
-            "parameters": params,
+            "parameters": to_llm_schema(self.input_schema),
         }

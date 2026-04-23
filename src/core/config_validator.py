@@ -1,44 +1,42 @@
 """
 Validates the ``config:`` block of a ``tool.yaml`` against the tool type's
-proto schema at load time (not at call time).
+YAML schema at load time (not at call time).
 
-Why proto for config
---------------------
-Using a ``.proto`` schema for the YAML config gives three compile-time-ish
-guarantees without writing any Python validator code:
+Why schema-validate at load time
+--------------------------------
+* **Typo detection** — ``methd: GET`` instead of ``method: GET`` is caught
+  immediately, not papered over with a silent default.
+* **Type enforcement** — ``timeout_seconds: "10"`` (string) fails because
+  the schema says ``integer``.
+* **Required fields** — missing ``endpoint`` on an ``api`` tool blocks
+  framework import rather than failing on the first call.
 
-1. **Typed field access** — ``timeout_seconds: "10"`` (string) will fail
-   because protobuf knows the field is ``int32``.
-2. **No silent typos** — ``methd: GET`` instead of ``method: GET`` raises
-   "unknown field methd" instead of silently using the default verb.
-3. **Required vs. optional** — fields are as documented in the proto file,
-   with no extra Python-level convention layer to get out of sync.
-
-Validation is a round-trip: dict → Message → dict. The returned dict is
-the **normalized** form (field names canonicalized, defaults filled in)
-that the runtime actually stores on :class:`ToolDefinition`.
+Validation is done by :mod:`jsonschema` (pure Python, no compile step).
+The returned dict is the input itself — jsonschema doesn't normalize, so
+field names and values come back exactly as declared in the user's yaml.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 from agent_tools.core.definition import ToolTypeEntry
-from agent_tools.proto.descriptor import ProtoDescriptor
-from agent_tools.proto.loader import ProtoLoader
+from agent_tools.schema.loader import SchemaLoader
+from agent_tools.schema.validator import validate_input
 
 
 class ConfigValidator:
     """
-    Compiles each tool type's config ``.proto`` schema on first use (cached),
-    then validates every ``config:`` dict through it.
+    Loads each tool type's config schema on first use (cached) and
+    validates every ``config:`` dict through it.
 
-    Raises :class:`ValueError` with a human-readable message on any violation:
-    missing required field, unknown field, or wrong field type.
+    Raises :class:`ValueError` with a human-readable message on any
+    violation — missing required field, unknown field, or wrong type.
     """
 
     def __init__(self) -> None:
-        self._proto_loader = ProtoLoader()
-        self._schema_cache: dict[str, ProtoDescriptor] = {}
+        self._schema_loader = SchemaLoader()
+        self._schema_cache: dict[str, dict[str, Any]] = {}
 
     def validate(
         self,
@@ -47,29 +45,25 @@ class ConfigValidator:
         entry: ToolTypeEntry,
     ) -> dict[str, Any]:
         """
-        Parse *config* through the type's proto schema and return the
-        round-tripped (cleaned / normalised) dict.
+        Validate *config* against the type's YAML schema and return it.
 
         :raises ValueError: on schema violation.
-        :raises FileNotFoundError: if the config schema proto is missing.
+        :raises FileNotFoundError: if the config schema file is missing.
         """
-        descriptor = self._get_schema(entry)
+        schema = self._get_schema(entry)
         try:
-            message = descriptor.from_dict(config)
-            return descriptor.to_dict(message)
-        except Exception as exc:
+            return validate_input(config, schema)
+        except ValueError as exc:
             raise ValueError(
                 f"Tool '{tool_name}' (type={entry.name}): invalid config — {exc}\n"
-                f"Expected schema: {entry.config_proto_path}"
+                f"Expected schema: {entry.config_schema_path}"
             ) from exc
 
-    def _get_schema(self, entry: ToolTypeEntry) -> ProtoDescriptor:
-        key = str(entry.config_proto_path)
+    def _get_schema(self, entry: ToolTypeEntry) -> dict[str, Any]:
+        key = str(entry.config_schema_path)
         if key not in self._schema_cache:
-            descriptor = self._proto_loader.load(entry.config_proto_path)
-            if descriptor is None:
-                raise FileNotFoundError(
-                    f"Config schema not found: {entry.config_proto_path}"
-                )
-            self._schema_cache[key] = descriptor
+            schema = self._schema_loader.load(entry.config_schema_path)
+            if schema is None:
+                raise FileNotFoundError(f"Config schema not found: {entry.config_schema_path}")
+            self._schema_cache[key] = schema
         return self._schema_cache[key]
