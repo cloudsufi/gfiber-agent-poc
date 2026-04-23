@@ -41,6 +41,7 @@ os.environ.setdefault("WEATHER_API_KEY", "demo-bearer-token")
 os.environ.setdefault("AGENT_ENV", "local-demo")
 
 from agent_tools import (  # noqa: E402
+    ToolContext,
     docs_mcp,
     score_function,
     support_cta,
@@ -63,7 +64,7 @@ async def demo_discovery() -> None:
 
 
 async def demo_schemas() -> None:
-    section("2. JSON schemas (derived from each tool's request.proto)")
+    section("2. JSON schemas (derived from each tool's input.yaml)")
     for schema in weather_api.all_schemas():
         print(f"\n— {schema['name']} —")
         print(pretty(schema["parameters"]))
@@ -72,7 +73,9 @@ async def demo_schemas() -> None:
 async def demo_api_tool() -> None:
     section("3. API tool — weather_api (real HTTP via httpbin.org)")
     try:
-        result = await weather_api(city="London", units="metric", trace_id="trace-001")
+        result = await weather_api(
+            ToolContext(), city="London", units="metric", trace_id="trace-001"
+        )
     except Exception as exc:  # network offline, httpbin flaky, etc.
         print(f"Skipping — HTTP call failed: {exc}")
         return
@@ -85,13 +88,16 @@ async def demo_api_tool() -> None:
 
 async def demo_mcp_tool() -> None:
     section("4. MCP tool — docs_mcp (mock_mode — no MCP server needed)")
-    result = await docs_mcp(query="onboarding checklist", top_k=3, filter_tag="docs")
+    result = await docs_mcp(
+        ToolContext(), query="onboarding checklist", top_k=3, filter_tag="docs"
+    )
     print(pretty(result))
 
 
 async def demo_function_tool() -> None:
     section("5. Function tool — score_function (local Python logic.py)")
     result = await score_function(
+        ToolContext(),
         email="ada@example.com",
         company="Example Corp",
         annual_spend=25_000,
@@ -102,7 +108,7 @@ async def demo_function_tool() -> None:
 
 async def demo_cta_tool() -> None:
     section("6. CTA tool — support_cta (Dialogflow CX — mock_mode response)")
-    result = await support_cta(text="Where is my order?", session_id="session-abc")
+    result = await support_cta(ToolContext(), text="Where is my order?", session_id="session-abc")
     print(pretty(result))
 
 
@@ -119,7 +125,9 @@ async def demo_dynamic_headers() -> None:
         with with_request_headers(
             {"X-Trace-Id": "scoped-trace", "X-Secret": "should-not-leak"}
         ):
-            r = await weather_api(city="Tokyo", units="metric", trace_id="tool-trace")
+            r = await weather_api(
+                ToolContext(), city="Tokyo", units="metric", trace_id="tool-trace"
+            )
         print("X-Trace-Id (allow-listed, runtime wins):", r["headers"].get("X-Trace-Id"))
         print("X-Secret   (not allow-listed, dropped) :", r["headers"].get("X-Secret"))
     except Exception as exc:
@@ -128,6 +136,7 @@ async def demo_dynamic_headers() -> None:
     # (b) One-shot via _headers= kwarg.
     try:
         r = await weather_api(
+            ToolContext(),
             city="Berlin",
             units="metric",
             trace_id="tool-trace-2",

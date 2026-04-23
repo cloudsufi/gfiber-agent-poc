@@ -28,12 +28,14 @@ The object looks like a function in tracebacks (``__name__``) and in docs
 (``__doc__`` pulled from the tool's description), but it's a full class so
 we can attach schema / runtime helpers as attributes.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent_tools.core.runtime import ToolRuntime
+    from agent_tools.core.tool_context import ToolContext
 
 
 class ToolFunction:
@@ -44,28 +46,30 @@ class ToolFunction:
     ``agent_tools`` namespace so that ``from agent_tools import <name>`` works.
     """
 
-    def __init__(self, name: str, runtime: "ToolRuntime") -> None:
+    def __init__(self, name: str, runtime: ToolRuntime) -> None:
         self._name = name
         self._runtime = runtime
-        self.__name__ = name          # looks like a real function in tracebacks
-        self.__doc__ = (
-            runtime._registry.get(name).description
-            if name in runtime._registry
-            else ""
-        )
+        self.__name__ = name  # looks like a real function in tracebacks
+        self.__doc__ = runtime._registry.get(name).description if name in runtime._registry else ""
 
         # ── Public attributes — available on every tool import ────────────────
-        self.runtime: "ToolRuntime" = runtime
+        self.runtime: ToolRuntime = runtime
 
     # ── Core call ─────────────────────────────────────────────────────────────
 
-    async def __call__(self, **kwargs: Any) -> Any:
+    async def __call__(
+        self, tool_context: ToolContext, **kwargs: Any
+    ) -> Any:
         """
-        Execute the tool with the provided keyword arguments.
+        Execute the tool with session context and keyword arguments.
 
-        ``kwargs`` corresponds to the tool's ``request.proto`` fields. Proto
-        validation happens inside the runtime's middleware pipeline — unknown
-        fields raise, type mismatches raise, missing required fields raise.
+        :param tool_context: Session metadata (session_id, user_id, event_type,
+            timestamp). This is the **first positional parameter** on every tool
+            call. It is never part of the LLM-facing schema.
+        :param kwargs: Tool input fields (corresponds to ``input.yaml``).
+            Validation happens inside the runtime's middleware pipeline —
+            unknown fields raise, type mismatches raise, missing required
+            fields raise.
 
         Reserved kwarg: ``_headers`` (``dict[str, str]``)
             If supplied, the entries are pushed into the request-scoped
@@ -75,7 +79,7 @@ class ToolFunction:
             Without that opt-in, ``_headers`` is silently dropped.
 
         :returns: The handler's output, after being round-tripped through
-            ``response.proto`` (when declared; unknown response fields are
+            ``output.yaml`` (when declared; unknown response fields are
             silently dropped so external APIs that return extras don't break
             the contract).
         """
@@ -84,8 +88,12 @@ class ToolFunction:
             from agent_tools.core.context import with_request_headers
 
             with with_request_headers(call_headers):
-                return await self._runtime.execute(self._name, kwargs)
-        return await self._runtime.execute(self._name, kwargs)
+                return await self._runtime.execute(
+                    self._name, kwargs, tool_context=tool_context
+                )
+        return await self._runtime.execute(
+            self._name, kwargs, tool_context=tool_context
+        )
 
     # ── Schema helpers ────────────────────────────────────────────────────────
 
@@ -104,12 +112,9 @@ class ToolFunction:
 
     # ── Tool list helper ──────────────────────────────────────────────────────
 
-    def all_tools(self) -> list["ToolFunction"]:
+    def all_tools(self) -> list[ToolFunction]:
         """Return all registered :class:`ToolFunction` objects."""
-        return [
-            ToolFunction(n, self._runtime)
-            for n in self._runtime._registry.names
-        ]
+        return [ToolFunction(n, self._runtime) for n in self._runtime._registry.names]
 
     # ── Dunder helpers ────────────────────────────────────────────────────────
 

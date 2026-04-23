@@ -1,11 +1,12 @@
 """Unit tests for agent_tools.handlers.api_handler."""
+
 from __future__ import annotations
 
+import httpx
 import pytest
 import respx
-import httpx
-
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
+from agent_tools.core.tool_context import ToolContext
 from agent_tools.core.runtime import ExecutionContext
 from agent_tools.handlers.api_handler import APIHandler, _inject_auth_headers
 
@@ -33,8 +34,11 @@ class TestInjectAuthHeaders:
 
 
 class TestAPIHandler:
-    def _make_ctx(self, url="https://api.example.com/v1/data", method="GET", params=None, auth=None):
+    def _make_ctx(
+        self, url="https://api.example.com/v1/data", method="GET", params=None, auth=None
+    ):
         from agent_tools.handlers.api_handler import APIHandler
+
         defn = ToolDefinition(
             name="test",
             version="1.0",
@@ -55,6 +59,7 @@ class TestAPIHandler:
             raw_kwargs={},
             validated_input={},
             resolved_auth=auth or {},
+            tool_context=ToolContext(),
         )
         return ctx
 
@@ -81,9 +86,7 @@ class TestAPIHandler:
     @pytest.mark.asyncio
     @respx.mock
     async def test_http_error_raises(self):
-        respx.get("https://api.example.com/v1/data").mock(
-            return_value=httpx.Response(500)
-        )
+        respx.get("https://api.example.com/v1/data").mock(return_value=httpx.Response(500))
         ctx = self._make_ctx()
         with pytest.raises(httpx.HTTPStatusError):
             await APIHandler().execute(ctx)

@@ -4,14 +4,14 @@ AuthMiddleware — resolves typed AuthConfig credentials at call time.
 Position in the pipeline
 ------------------------
 AuthMiddleware is the **outermost** wrapper in the default pipeline —
-credentials are resolved exactly once per call, before retries or proto
+credentials are resolved exactly once per call, before retries or schema
 validation run. That matters for OAuth2 and service-account auth, where
 "resolve" means "mint a token", and doing it per retry attempt would cost
 real latency and quota.
 
 Inputs and outputs
 ------------------
-* **Input**:  ``ctx.tool_def.config["auth"]`` — a dict produced by proto
+* **Input**:  ``ctx.tool_def.config["auth"]`` — a dict produced by schema
   round-trip of the tool's ``AuthConfig`` block. Always a oneof-style
   mapping like ``{"bearer": {"token": {...}}}``.
 * **Output**: ``ctx.resolved_auth`` — a flat dict that handlers consume.
@@ -34,7 +34,7 @@ Each credential field is a ``SecretRef`` that names WHERE the value lives:
                 ``with_request_headers(...)`` / ``_headers=`` kwarg.
                 Case-insensitive lookup.
  ``PARAMETER``  Value from ``ctx.validated_input[<name>]`` — i.e. a field
-                on the request proto.
+                on the validated request.
  ``GCP_SECRET`` Google Secret Manager resource name
                 ``projects/P/secrets/S/versions/V``. Resolved on-demand
                 via ``google-cloud-secret-manager``.
@@ -58,13 +58,15 @@ Google-specific auth types
 Handlers never touch env vars, files, or Secret Manager directly — they
 always read the resolved value from ``ctx.resolved_auth``.
 """
+
 from __future__ import annotations
 
 import base64
 import json
 import logging
 import os
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from agent_tools.core.context import current_request_headers
 
@@ -259,7 +261,6 @@ def _fetch_service_account_token(
     """Resolve a GCP service-account JSON key and mint an access/ID token."""
     try:
         from google.auth.transport.requests import Request  # type: ignore
-        from google.oauth2 import id_token as google_id_token  # type: ignore
         from google.oauth2 import service_account  # type: ignore
     except ImportError:
         log.warning(
@@ -331,7 +332,7 @@ def _fetch_service_agent_token(
             return {}
 
         if audience:
-            creds = impersonated_credentials.IDTokenCredentials(
+            creds = impersonated_credentials.IDTokenCredentials(  # type: ignore[assignment]
                 impersonated_credentials.Credentials(
                     source_credentials=source_creds,
                     target_principal=target_principal,
@@ -340,7 +341,7 @@ def _fetch_service_agent_token(
                 target_audience=audience,
             )
         else:
-            creds = impersonated_credentials.Credentials(
+            creds = impersonated_credentials.Credentials(  # type: ignore[assignment]
                 source_credentials=source_creds,
                 target_principal=target_principal,
                 target_scopes=default_scopes,

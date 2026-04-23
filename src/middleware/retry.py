@@ -17,9 +17,10 @@ Backoff is exponential: ``2**attempt`` seconds (1s, 2s, 4s, 8s, …). There
 is no jitter today; add it if thundering-herd becomes a real problem.
 
 The middleware sits **inside** auth (so OAuth tokens aren't re-fetched on
-every attempt) and **outside** proto validation (so a malformed request
+every attempt) and **outside** schema validation (so a malformed request
 surfaces once as a validation error, not as N retried validation errors).
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -1,0 +1,44 @@
+# Schema for the `config:` block of a `type: api` tool.
+$schema: "http://json-schema.org/draft-07/schema#"
+title: APIToolConfig
+type: object
+additionalProperties: false
+required: [endpoint]
+properties:
+  endpoint:
+    type: string
+    description: Target URL.
+  method:
+    type: string
+    enum: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+    default: GET
+  headers:
+    type: object
+    additionalProperties: { type: string }
+    description: >
+      Static or templated headers. {{field}} pulls from the validated
+      request; {{env:VAR}} pulls from os.environ.
+  params:
+    type: object
+    additionalProperties: { type: string }
+  body_template:
+    type: string
+  request_content_type:
+    type: string
+  timeout_seconds:
+    type: integer
+    minimum: 0
+  max_retries:
+    type: integer
+    minimum: 0
+  runtime_headers:
+    type: array
+    items: { type: string }
+    description: >
+      Opt-in list of header names accepted from with_request_headers(...)
+      or the _headers= kwarg on a call. Absent ⇒ runtime headers are dropped.
+  auth:
+    # Inlined from auth_config.yaml — duplicated rather than $ref'd so
+    # schemas load as self-contained docs without a resolver.
+    type: object
+    additionalProperties: true

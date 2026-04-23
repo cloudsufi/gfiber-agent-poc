@@ -1,8 +1,8 @@
 # Architecture
 
-> Proto-first, config-driven tool framework for ADK agents.
+> YAML-first, config-driven tool framework for ADK agents.
 > Adding a new tool means dropping a folder on disk. Adding a new tool *type*
-> means writing one proto + one handler class.
+> means writing one YAML schema + one handler class.
 
 ---
 
@@ -10,13 +10,13 @@
 
 | Principle | Rule |
 |-----------|------|
-| **Proto-first contracts** | Both the tool's *config* and its *request/response* are `.proto` files — the YAML is only a declarative binding layer. |
-| **Two-level schema enforcement** | Level 1: `tool.yaml config:` block is validated against the tool type's config proto at **load time**. Level 2: per-call input/output is validated against `request.proto` / `response.proto` at **call time**. |
-| **Zero-code extensibility** | New tool type = one config schema proto + one handler class + one registry call. No core edits. |
-| **Typed auth** | A shared `AuthConfig` proto describes bearer / api_key / oauth2 / basic. No free-form credential strings in YAML. |
-| **Eager loading** | Every tool is discovered, validated, and compiled once at import. Misconfigurations surface at startup, never at call time. |
-| **Direct imports** | `from agent_tools import check_billing` — each tool is an awaitable callable exposing its own ADK/JSON schema. |
-| **Env-var runtime tuning** | Global defaults (tools dir, timeout, retries, log level) are all `AGENT_TOOLS_*` env vars. |
+| **Schema-first contracts** | Both the tool's *config* and its *input/output* are YAML files whose contents are valid JSON Schema. No build step. |
+| **Two-level schema enforcement** | Level 1: `tool.yaml` ``config:`` block is validated against the tool type's schema at **load time**. Level 2: per-call input/output is validated against ``input.yaml`` / ``output.yaml`` at **call time**. |
+| **Zero-code extensibility** | New tool type = one config schema YAML + one handler class + one registry call. No core edits. |
+| **Typed auth** | A shared ``AuthConfig`` schema describes bearer / api_key / oauth2 / basic / service_account / service_agent. No free-form credential strings in YAML. |
+| **Eager loading** | Every tool is discovered, validated, and loaded once at import. Misconfigurations surface at startup, never at call time. |
+| **Direct imports** | ``from agent_tools import weather_api`` — each tool is an awaitable callable exposing its own ADK/JSON schema. |
+| **Env-var runtime tuning** | Global defaults (tools dir, timeout, retries, log level) are all ``AGENT_TOOLS_*`` env vars. |
 
 ---
 
@@ -25,8 +25,8 @@
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                    Calling code / ADK agent                           │
-│  from agent_tools import check_billing                                │
-│  await check_billing(customer_id="X", period="2026-04")               │
+│  from agent_tools import weather_api                                  │
+│  await weather_api(city="London", units="metric", trace_id="t-1")     │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │
                                 ▼
@@ -40,24 +40,24 @@
                     │                        │
               ToolRegistry            MiddlewarePipeline  (src/middleware/pipeline.py)
            (name → ToolDefinition)
-                                  AuthMiddleware         ctx.resolved_auth
+                                  AuthMiddleware            ctx.resolved_auth
                                        │
-                                  RetryMiddleware        exponential backoff
+                                  RetryMiddleware           exponential backoff
                                        │
-                              ProtoValidationMiddleware  validates input + output
+                              SchemaValidationMiddleware    validates input + output
                                        │
-                                 LoggingMiddleware       structured logs
+                                 LoggingMiddleware          structured logs
                                        │
-                                 ExecutorRouter          dispatch by handler_class
+                                 ExecutorRouter             dispatch by handler_class
                                        │
-                              ┌───────────┬──┴─────────┬────────────┐
-                              ▼           ▼            ▼            ▼
-                         APIHandler  MCPHandler FunctionHandler  CTAHandler
+                              ┌────────┬──┴──────────┬─────────────┐
+                              ▼        ▼             ▼             ▼
+                         APIHandler  MCPHandler  FunctionHandler  CTAHandler
 
 STARTUP PATH (at import):
   ToolLoader → reads every tool.yaml
-             → ConfigValidator checks config: against ToolTypeRegistry[type].config_proto
-             → ProtoLoader compiles request.proto + response.proto
+             → ConfigValidator checks config: against ToolTypeRegistry[type].config_schema (jsonschema)
+             → SchemaLoader parses input.yaml + output.yaml
              → registers ToolDefinition in ToolRegistry
              → ToolFunction(name, runtime) exposed as a module-level attribute
 ```
@@ -77,23 +77,29 @@ src/
 │   ├── settings.py             Env-var config (Settings singleton)
 │   ├── definition.py           ToolDefinition, ExecutionConfig, ToolTypeEntry
 │   ├── registry.py             In-memory tool registry
-│   ├── type_registry.py        ToolTypeRegistry — type name → (config proto, handler)
-│   ├── config_validator.py     Validates tool.yaml `config:` against type's proto schema
-│   ├── loader.py               Scans tools dir, validates YAML, compiles protos
+│   ├── type_registry.py        ToolTypeRegistry — type name → (config schema, handler)
+│   ├── config_validator.py     Validates tool.yaml `config:` against type's YAML schema
+│   ├── loader.py               Scans tools dir, validates YAML, loads input/output schemas
 │   ├── runtime.py              ToolRuntime + ExecutionContext
 │   ├── function.py             ToolFunction — awaitable wrapper, handles _headers kwarg
 │   └── context.py              Request-scoped ContextVar for dynamic header injection
 │
-├── proto/                      agent_tools.proto
-│   ├── loader.py               Compiles .proto via grpc_tools.protoc
-│   ├── descriptor.py           ProtoDescriptor — from_dict / to_dict helpers
-│   └── converter.py            Derives JSON Schema from proto descriptor (ADK bridge)
+├── schema/                     agent_tools.schema
+│   ├── loader.py               SchemaLoader — reads YAML, caches per path
+│   ├── validator.py            validate_input (strict), validate_output (lenient)
+│   ├── converter.py            to_llm_schema — strips metadata for ADK declarations
+│   └── types/                  Per-type config schemas (YAML data files)
+│       ├── auth_config.yaml        Shared AuthConfig + SecretRef source types
+│       ├── api_tool_config.yaml
+│       ├── mcp_tool_config.yaml
+│       ├── function_tool_config.yaml
+│       └── cta_tool_config.yaml
 │
 ├── middleware/                 agent_tools.middleware
-│   ├── pipeline.py             Builds: Auth → Retry → ProtoValidation → Logging → Router
+│   ├── pipeline.py             Builds: Auth → Retry → SchemaValidation → Logging → Router
 │   ├── auth.py                 Resolves env-var credentials into ctx.resolved_auth
 │   ├── retry.py                Exponential-backoff retry
-│   ├── proto_validation.py     Validates input/output against proto schemas
+│   ├── schema_validation.py    Validates input/output against YAML schemas (jsonschema)
 │   └── logging.py              Structured call logging (tool, status, ms)
 │
 ├── handlers/                   agent_tools.handlers
@@ -104,19 +110,20 @@ src/
 │   ├── function_handler.py     Loads logic.py, awaits async run(inputs)
 │   └── cta_handler.py          Dialogflow CX DetectIntent (supports mock_mode)
 │
-├── schemas/                    Per-type config schemas (data — no __init__.py)
-│   ├── auth_config.proto       Shared AuthConfig + SecretRef source types
-│   ├── api_tool_config.proto
-│   ├── mcp_tool_config.proto
-│   ├── function_tool_config.proto
-│   └── cta_tool_config.proto
-│
 └── tools/                      Your tool definitions (one folder per tool)
-    ├── weather_api/            type: api     (real HTTP + templated headers/params)
-    ├── docs_mcp/               type: mcp     (mock_mode demo)
-    ├── score_function/         type: function (local logic.py)
-    └── support_cta/            type: cta     (Dialogflow CX mock_mode demo)
+    ├── weather_api/            type: api       (real HTTP + templated headers/params)
+    ├── docs_mcp/               type: mcp       (mock_mode demo)
+    ├── score_function/         type: function  (local logic.py)
+    └── support_cta/            type: cta       (Dialogflow CX mock_mode demo)
 ```
+
+Each tool directory looks like::
+
+    <tool_name>/
+    ├── tool.yaml       # name, type, description, config block, execution overrides
+    ├── input.yaml      # JSON Schema for kwargs
+    ├── output.yaml     # JSON Schema for handler result
+    └── logic.py        # only for type: function — exports `async def run(inputs)`
 
 ---
 
@@ -124,19 +131,19 @@ src/
 
 ### ToolLoader — `core/loader.py`
 Walks the tools directory, reads every `tool.yaml`, hands the `config:` block to
-`ConfigValidator`, compiles `request.proto` / `response.proto` via `ProtoLoader`,
+`ConfigValidator`, parses `input.yaml` / `output.yaml` via `SchemaLoader`,
 and returns a fully-resolved `ToolDefinition`.
 
 ### ConfigValidator — `core/config_validator.py`
-Looks up the tool type's config schema in the `ToolTypeRegistry`, parses the
-YAML dict through the proto message, and round-trips it back to a cleaned dict.
-Any missing required field, unknown field, or wrong-type field fails **here**
-with a human-readable error — not at first call.
+Looks up the tool type's config schema in the `ToolTypeRegistry`, validates
+the YAML `config:` block against that schema using `jsonschema`. Missing
+required fields, unknown fields, and type mismatches all raise here with a
+human-readable error — never at first call.
 
 ### ToolTypeRegistry — `core/type_registry.py`
-A map of `type_name → (config_proto_path, handler_class)`. The default registry
-ships with the four primary types: `api`, `mcp`, `function`, `cta`. Additional types
-register themselves via `tr.default_type_registry.register(...)` **before**
+A map of `type_name → (config_schema_path, handler_class)`. The default
+registry ships with `api`, `mcp`, `function`, `cta`. Custom types register
+themselves via `default_type_registry.register(...)` **before**
 `agent_tools` is imported.
 
 ### ToolRuntime — `core/runtime.py`
@@ -146,7 +153,7 @@ ultimately routes through.
 
 ### ExecutionContext — `core/runtime.py`
 One per call. Carries `tool_def`, `raw_kwargs`, `validated_input`,
-`resolved_auth`, `proto_input`, `result`. Middleware mutate it; handlers read it.
+`resolved_auth`, `result`. Middleware mutate it; handlers read it.
 
 ### ToolFunction — `core/function.py`
 Thin awaitable wrapper. `from agent_tools import my_tool` gives you one of
@@ -163,8 +170,8 @@ Built in `middleware/pipeline.py`. Order (outermost first):
 | # | Middleware | Responsibility |
 |---|------------|---------------|
 | 1 | `AuthMiddleware` | Reads `config.auth`, resolves env-var credentials, writes `ctx.resolved_auth` |
-| 2 | `RetryMiddleware` | Exponential backoff; retries `RetryableError` up to `settings.default_retries` |
-| 3 | `ProtoValidationMiddleware` | Validates `kwargs` against `request.proto` → `ctx.validated_input`; validates result against `response.proto` |
+| 2 | `RetryMiddleware` | Exponential backoff; retries up to `settings.default_retries` |
+| 3 | `SchemaValidationMiddleware` | Validates `kwargs` against `input.yaml` → `ctx.validated_input`; validates result against `output.yaml` |
 | 4 | `LoggingMiddleware` | Structured before/after logs with timing + status |
 | 5 | `ExecutorRouter` | Terminal — dispatches to the handler class recorded on `ToolDefinition` |
 
@@ -177,14 +184,15 @@ Adding one is additive: write the class, append it to `MiddlewarePipeline.build`
 
 All handlers extend `BaseHandler` and implement `async execute(ctx)`. They
 receive a fully-populated `ExecutionContext` and return a plain dict (which the
-proto-validation middleware then re-checks against `response.proto`).
+schema-validation middleware then re-checks against `output.yaml`, dropping
+unknown fields).
 
-| Handler | Type  | Transport | Config proto |
-|---------|-------|-----------|--------------|
-| `APIHandler`    | `api`    | HTTP via httpx — OpenAPI-style call, rich auth, templated params/headers/body | `api_tool_config.proto` |
-| `MCPHandler`    | `mcp`    | MCP protocol client. Supports `mock_mode: true` for demos. | `mcp_tool_config.proto` |
-| `FunctionHandler` | `function` | Loads `logic.py`, awaits `async run(inputs)`. | `function_tool_config.proto` |
-| `CTAHandler`    | `cta`    | Google Dialogflow CX `DetectIntent`. Supports `mock_mode: true`. | `cta_tool_config.proto` |
+| Handler | Type  | Transport | Config schema |
+|---------|-------|-----------|---------------|
+| `APIHandler`      | `api`      | HTTP via httpx — OpenAPI-style call, rich auth, templated params/headers/body | `api_tool_config.yaml` |
+| `MCPHandler`      | `mcp`      | MCP protocol client. Supports `mock_mode: true` for demos. | `mcp_tool_config.yaml` |
+| `FunctionHandler` | `function` | Loads `logic.py`, awaits `async run(inputs)`. | `function_tool_config.yaml` |
+| `CTAHandler`      | `cta`      | Google Dialogflow CX `DetectIntent`. Supports `mock_mode: true`. | `cta_tool_config.yaml` |
 
 These four are the only types registered by default. Custom types register
 themselves via `ToolTypeRegistry.register(...)` — see §9.
@@ -201,7 +209,7 @@ runtime **where** the value lives:
 |---------------|----------------------------|
 | `ENV`         | `os.environ[<name>]` — default |
 | `HEADER`      | Inbound HTTP header from `with_request_headers(...)` / `_headers=` kwarg. Case-insensitive lookup. |
-| `PARAMETER`   | Field on the validated request proto |
+| `PARAMETER`   | Field on the validated request input |
 | `GCP_SECRET`  | Google Secret Manager resource: `projects/P/secrets/S/versions/V` |
 
 Two higher-level GCP auth types piggy-back on this:
@@ -209,8 +217,8 @@ Two higher-level GCP auth types piggy-back on this:
 - **`service_account`** — JSON key from any `SecretRef`; `google.oauth2.service_account` mints an access token (or an ID token when `audience` is set).
 - **`service_agent`** — Application Default Credentials, optionally impersonating `target_principal` via `google.auth.impersonated_credentials`.
 
-Legacy string fields (`token_env`, `key_env`, `client_id_env`, …) remain
-accepted by the proto schema and are up-converted to `{source: ENV, name: …}`
+Legacy string fields (`token_env`, `key_env`, `client_id_env`, …) are
+accepted in the YAML schema and up-converted to `{source: ENV, name: …}`
 at resolve time, so pre-refactor `tool.yaml` files keep working unchanged.
 
 All auth resolution happens exactly once per call in `AuthMiddleware` —
@@ -225,9 +233,9 @@ one **opt-in** source:
 
 1. **Static values** from `tool.yaml` `headers:` map.
 2. **Templated values** in the same map.
-   - `{{field_name}}` → pulls from `ctx.validated_input` (i.e. the request proto).
+   - `{{field_name}}` → pulls from `ctx.validated_input`.
    - `{{env:VAR_NAME}}` → pulls from `os.environ`.
-   - Any header whose template references an unresolved value is **skipped**
+   - A header whose template references an unresolved value is **skipped**
      silently — lets you declare optional trace/tenant headers.
 3. **Auth headers** injected by `AuthMiddleware` (e.g. `Authorization: Bearer …`).
 4. **Runtime-injected headers** from agent code — gated by the tool's
@@ -248,9 +256,7 @@ config:
 ```
 
 Comparison is case-insensitive. Any runtime-supplied header whose name is
-**not** on the list is silently dropped before the HTTP call is made. This
-keeps agent code from accidentally (or maliciously) overriding headers the
-tool didn't design for — including auth.
+**not** on the list is silently dropped before the HTTP call is made.
 
 When an allow-listed header is supplied at runtime, it **overrides** the
 corresponding yaml-templated or auth-injected value.
@@ -260,11 +266,9 @@ corresponding yaml-templated or auth-injected value.
 ```python
 from agent_tools import with_request_headers, weather_api
 
-# Block-scoped — applies to every tool call inside the with-block
 with with_request_headers({"X-Trace-Id": trace}):
     await weather_api(city="London", units="metric", trace_id="t-1")
 
-# One-shot via the reserved _headers= kwarg
 await weather_api(
     city="Tokyo", units="metric", trace_id="t-2",
     _headers={"X-Trace-Id": trace},
@@ -289,8 +293,8 @@ import agent_tools
        │     │     for each tool folder:
        │     │       ├─► parse tool.yaml
        │     │       ├─► ConfigValidator.validate(config, type_entry)
-       │     │       │     └─► proto round-trip — raises on any violation
-       │     │       ├─► ProtoLoader.load(request.proto, response.proto)
+       │     │       │     └─► jsonschema.validate — raises on any violation
+       │     │       ├─► SchemaLoader.load(input.yaml, output.yaml)
        │     │       └─► yield ToolDefinition(...)
        │     ├─► ToolRegistry.register(defn) for each
        │     └─► MiddlewarePipeline.build(settings)
@@ -299,8 +303,9 @@ import agent_tools
              globals()[name] = ToolFunction(name, runtime)
 ```
 
-Anything that can fail — bad YAML, unknown tool type, missing proto field,
-wrong credential block — fails **here**, at import. Never at call time.
+Anything that can fail — bad YAML, unknown tool type, missing required
+config field, malformed schema — fails **here**, at import. Never at call
+time.
 
 ---
 
@@ -308,12 +313,13 @@ wrong credential block — fails **here**, at import. Never at call time.
 
 ### Add a new tool
 1. `mkdir src/tools/my_tool`
-2. Drop in `tool.yaml`, optional `request.proto` / `response.proto`, optional
-   `logic.py` (for `type: python`).
+2. Drop in `tool.yaml`, optional `input.yaml` / `output.yaml`, optional
+   `logic.py` (for `type: function`).
 3. Import — it's there.
 
 ### Add a new tool *type*
-1. Define the config schema at `src/schemas/<type>_tool_config.proto`.
+1. Define the config schema at `src/schema/types/<type>_tool_config.yaml` (JSON
+   Schema in YAML form).
 2. Implement the handler at `src/handlers/<type>_handler.py`, extending
    `BaseHandler`.
 3. Register it — *before* importing `agent_tools`:
@@ -324,7 +330,7 @@ wrong credential block — fails **here**, at import. Never at call time.
 
    tr.default_type_registry.register(
        "kafka",
-       Path("src/schemas/kafka_tool_config.proto"),
+       Path("src/schema/types/kafka_tool_config.yaml"),
        KafkaHandler,
    )
    import agent_tools
@@ -353,12 +359,11 @@ Resolved once in `Settings.load()` at startup.
 
 | Artifact | File | Validated… |
 |---|---|---|
-| Tool config | `tool.yaml` `config:` block | at load time against `schemas/<type>_tool_config.proto` |
-| Auth config | inline under `config.auth` | at load time against `schemas/auth_config.proto` |
-| Request input | `request.proto` | at call time by `ProtoValidationMiddleware` |
-| Response output | `response.proto` | at call time by `ProtoValidationMiddleware` |
-| ADK / LLM schema | derived from `request.proto` | on access via `.schema` / `.all_schemas()` |
+| Tool config | `tool.yaml` `config:` block | at load time against `schemas/<type>_tool_config.yaml` |
+| Auth config | inline under `config.auth` | at load time against `schemas/auth_config.yaml` |
+| Request input | `input.yaml` | at call time by `SchemaValidationMiddleware` (strict) |
+| Response output | `output.yaml` | at call time by `SchemaValidationMiddleware` (lenient — unknown fields dropped) |
+| ADK / LLM schema | derived from `input.yaml` | on access via `.schema` / `.all_schemas()` |
 
-Every value the agent hands in, and every value the tool hands back, passes
-through a proto round-trip. The YAML is ergonomic sugar; the protos are the
-source of truth.
+Every value the agent hands in, and every value the tool hands back,
+passes through a JSON Schema check. The YAML is the source of truth.

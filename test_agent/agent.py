@@ -4,14 +4,21 @@ Demo ADK agent that consumes tools from the ``agent_tools`` package.
 The agent is built from every tool registered by ``agent_tools`` at import
 time — no manual wiring. Each ``ToolFunction`` is wrapped in a thin
 :class:`AgentToolsAdapter` so ADK can discover its JSON-Schema declaration
-(derived from the tool's ``request.proto``) and dispatch calls into the
+(derived from the tool's ``input.yaml``) and dispatch calls into the
 framework runtime.
+
+AgentToolsAdapter also bridges ADK's tool_context into the framework's
+ToolContext, so session metadata (session_id, user_id, event_type) flows
+through to handlers and logging.
 """
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
-from agent_tools import weather_api  # triggers framework startup
+from agent_tools import ToolContext, weather_api  # triggers framework startup
 
 # ``weather_api`` is an arbitrary handle — every ToolFunction exposes the
 # same ``all_tools()`` / ``all_schemas()`` view over the shared registry.
@@ -76,6 +83,24 @@ class AgentToolsAdapter:
                 )
 
             async def run_async(self, *, args: dict[str, Any], tool_context) -> Any:
-                return await self._tool_fn(**args)
+                # Bridge ADK's tool_context into framework's ToolContext
+                uid = ""
+                if tool_context and hasattr(tool_context, "state"):
+                    uid = tool_context.state.get("user_id", "") if tool_context.state else ""
+                hashed = hashlib.sha256(uid.encode()).hexdigest() if uid else ""
+
+                session_id = ""
+                if tool_context and hasattr(tool_context, "state"):
+                    session_id = tool_context.state.get("session_id", str(uuid4())) if tool_context.state else str(uuid4())
+                else:
+                    session_id = str(uuid4())
+
+                tc = ToolContext(
+                    session_id=session_id,
+                    hashed_user_id=hashed,
+                    event_type=tool_context.state.get("event_type", "adk_tool_call") if (tool_context and hasattr(tool_context, "state") and tool_context.state) else "adk_tool_call",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                )
+                return await self._tool_fn(tc, **args)
 
         return _Adapter(tool_fn)

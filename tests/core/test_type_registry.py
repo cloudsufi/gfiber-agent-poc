@@ -1,11 +1,10 @@
 """Unit tests for agent_tools.core.type_registry."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
-from agent_tools.core.definition import ToolTypeEntry
 from agent_tools.core.type_registry import ToolTypeRegistry, default_type_registry
 from agent_tools.handlers.api_handler import APIHandler
 
@@ -13,7 +12,7 @@ from agent_tools.handlers.api_handler import APIHandler
 class TestToolTypeRegistry:
     def test_register_and_get(self, tmp_path):
         reg = ToolTypeRegistry()
-        reg.register("myext", tmp_path / "c.proto", APIHandler)
+        reg.register("myext", tmp_path / "c.yaml", APIHandler)
         entry = reg.get("myext")
         assert entry.name == "myext"
         assert entry.handler_class is APIHandler
@@ -25,13 +24,13 @@ class TestToolTypeRegistry:
 
     def test_known_types_sorted(self):
         reg = ToolTypeRegistry()
-        reg.register("z", Path("/tmp/z.proto"), APIHandler)
-        reg.register("a", Path("/tmp/a.proto"), APIHandler)
+        reg.register("z", Path("/tmp/z.yaml"), APIHandler)
+        reg.register("a", Path("/tmp/a.yaml"), APIHandler)
         assert reg.known_types() == ["a", "z"]
 
     def test_contains(self):
         reg = ToolTypeRegistry()
-        reg.register("mine", Path("/tmp/x.proto"), APIHandler)
+        reg.register("mine", Path("/tmp/x.yaml"), APIHandler)
         assert "mine" in reg
         assert "other" not in reg
 

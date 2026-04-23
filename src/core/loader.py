@@ -17,10 +17,10 @@ For each ``<tools_dir>/<tool_name>/`` with a ``tool.yaml``:
 2. Resolve the tool ``type`` against :class:`ToolTypeRegistry` to get the
    config schema path and handler class. Unknown type → :class:`KeyError`.
 3. Hand the ``config:`` block to :class:`ConfigValidator`, which parses it
-   through the type's ``.proto`` schema. Returns the round-tripped dict;
+   through the type's ``.yaml`` schema. Returns the round-tripped dict;
    raises :class:`ValueError` on any violation (missing required field,
    unknown field, wrong type).
-4. Compile ``request.proto`` and ``response.proto`` via :class:`ProtoLoader`.
+4. Compile ``input.yaml`` and ``output.yaml`` via :class:`SchemaLoader`.
    Both are optional; a missing file returns ``None``.
 5. Pack everything into a :class:`ToolDefinition` and return.
 
@@ -30,16 +30,16 @@ Every validation check here runs **once** at process start. A broken
 ``tool.yaml`` never reaches the first call site — the framework refuses to
 import rather than erroring mid-conversation with an LLM.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import yaml
-
 from agent_tools.core.config_validator import ConfigValidator
 from agent_tools.core.definition import ExecutionConfig, ToolDefinition
 from agent_tools.core.type_registry import ToolTypeRegistry, default_type_registry
-from agent_tools.proto.loader import ProtoLoader
+from agent_tools.schema.loader import SchemaLoader
 
 
 class ToolLoader:
@@ -48,8 +48,8 @@ class ToolLoader:
 
     1. Parse ``tool.yaml``
     2. Resolve handler + config schema via :class:`ToolTypeRegistry`
-    3. Validate ``config:`` block via :class:`ConfigValidator` (proto-enforced)
-    4. Compile ``request.proto`` + ``response.proto`` (optional)
+    3. Validate ``config:`` block via :class:`ConfigValidator`
+    4. Load ``input.yaml`` + ``output.yaml`` (both optional)
     5. Return a fully-resolved :class:`ToolDefinition`
 
     Any config violation raises :class:`ValueError` at step 3 — tools are never
@@ -62,7 +62,7 @@ class ToolLoader:
     ) -> None:
         self._type_registry = type_registry
         self._config_validator = ConfigValidator()
-        self._proto_loader = ProtoLoader()
+        self._schema_loader = SchemaLoader()
 
     # ── public ────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ class ToolLoader:
         happens here — the returned definition is ready for the runtime.
 
         :raises FileNotFoundError: if ``tool.yaml`` or the type's config
-            proto is missing.
+            schema is missing.
         :raises KeyError: if the YAML ``type`` isn't registered.
         :raises ValueError: on any config-validation failure (with a
             human-readable message pointing at the offending field).
@@ -85,10 +85,16 @@ class ToolLoader:
 
         type_entry = self._type_registry.get(tool_type)
 
-        # Validate config block against type-specific proto schema
+        # Validate config block against the type's YAML schema.
         validated_config = self._config_validator.validate(
             tool_name, raw.get("config", {}), type_entry
         )
+
+        # Resolve input/output schema filenames. Defaults match the
+        # convention (``input.yaml`` / ``output.yaml``); tool.yaml can
+        # override with any filename.
+        input_schema_name = raw.get("input_schema", "input.yaml")
+        output_schema_name = raw.get("output_schema", "output.yaml")
 
         return ToolDefinition(
             name=tool_name,
@@ -101,8 +107,8 @@ class ToolLoader:
                 timeout=raw.get("execution", {}).get("timeout", -1),
             ),
             handler_class=type_entry.handler_class,
-            proto_input=self._proto_loader.load(tool_dir / "request.proto"),
-            proto_output=self._proto_loader.load(tool_dir / "response.proto"),
+            input_schema=self._schema_loader.load(tool_dir / input_schema_name),
+            output_schema=self._schema_loader.load(tool_dir / output_schema_name),
             tool_dir=tool_dir,
         )
 

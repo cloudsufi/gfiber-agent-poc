@@ -1,7 +1,0 @@
-syntax = "proto3";
-package support_cta;
-
-message SupportCtaRequest {
-  string text       = 1;   // user utterance sent to the CX agent
-  string session_id = 2;   // optional — stable id for multi-turn dialogue
-}

@@ -1,4 +1,5 @@
 """Default type registry — the four primary types are always present."""
+
 from __future__ import annotations
 
 from agent_tools.core.type_registry import default_type_registry
@@ -21,7 +22,7 @@ class TestDefaultTypeRegistry:
         for name in ("api", "mcp", "function", "cta"):
             entry = default_type_registry.get(name)
             assert entry.name == name
-            assert entry.config_proto_path.exists()
+            assert entry.config_schema_path.exists()
             assert entry.handler_class is not None
 
     def test_only_four_types_registered(self):

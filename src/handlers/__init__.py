@@ -5,7 +5,7 @@ A handler is the strategy that actually invokes a tool. The framework
 routes to it through :class:`~agent_tools.handlers.router.ExecutorRouter`,
 which is the terminal middleware in the pipeline — by the time a handler
 runs, auth has been resolved, input has been validated against
-``request.proto``, and retries are already wrapping the call.
+``input.yaml``, and retries are already wrapping the call.
 
 Each primary tool type has one handler:
 
@@ -33,8 +33,8 @@ Extending
 ---------
 Adding a new handler is three files, zero edits to the framework:
 
-1. Define a ``.proto`` config schema for the new type under ``src/schemas/``.
+1. Define a ``.yaml`` config schema for the new type under ``src/schema/types/``.
 2. Write the handler class subclassing :class:`BaseHandler`.
-3. Register with ``default_type_registry.register(name, proto_path, HandlerCls)``
+3. Register with ``default_type_registry.register(name, schema_path, HandlerCls)``
    **before** ``import agent_tools`` so the loader sees the new type.
 """

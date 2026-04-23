@@ -4,7 +4,7 @@ ExecutorRouter — terminal middleware that dispatches to the handler.
 Position in the pipeline
 ------------------------
 The router is always the **innermost** link in the middleware chain — by
-the time it runs, all cross-cutting middleware (auth, retry, proto
+the time it runs, all cross-cutting middleware (auth, retry, schema
 validation, logging) have already wrapped the call. Its job is trivial:
 pick the handler instance, call ``execute(ctx)``, stash the result on
 ``ctx.result``, and return it.
@@ -23,6 +23,7 @@ instance. That's safe because handlers pass all per-call state through
 :class:`ExecutionContext`; they never rely on instance attributes for
 request-specific data.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,6 +52,7 @@ class ExecutorRouter:
         sentinel to keep the chain-construction loop uniform; we just drop
         it on the floor.
         """
+
         async def _route(ctx: Any) -> Any:  # type: ignore[misc]
             handler = self._get_handler(ctx.tool_def.handler_class)
             ctx.result = await handler.execute(ctx)

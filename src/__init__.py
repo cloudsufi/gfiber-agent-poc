@@ -20,11 +20,13 @@ Custom tool types can be registered *before* this module is imported::
     tr.default_type_registry.register("my_type", schema_path, MyHandler)
     import agent_tools                       # picks up the new type
 """
+
 from __future__ import annotations
 
 from agent_tools.core.context import current_request_headers, with_request_headers
 from agent_tools.core.function import ToolFunction
 from agent_tools.core.runtime import ToolRuntime
+from agent_tools.core.tool_context import ToolContext
 
 # ── Single shared runtime — loaded once at startup ────────────────────────────
 runtime = ToolRuntime.from_env()
@@ -38,6 +40,7 @@ for _name in runtime._registry.names:
 
 __all__: list[str] = [
     "runtime",
+    "ToolContext",
     "with_request_headers",
     "current_request_headers",
 ] + list(_tool_functions.keys())

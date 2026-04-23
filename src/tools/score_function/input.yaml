@@ -1,0 +1,8 @@
+type: object
+additionalProperties: false
+required: [email, company, annual_spend, region]
+properties:
+  email:        { type: string, format: email }
+  company:      { type: string }
+  annual_spend: { type: integer, minimum: 0 }
+  region:       { type: string }

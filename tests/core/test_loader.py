@@ -1,14 +1,10 @@
 """Unit tests for agent_tools.core.loader."""
-from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from __future__ import annotations
 
 import pytest
 import yaml
-
 from agent_tools.core.loader import ToolLoader
-from agent_tools.core.definition import ToolDefinition
 
 
 class TestToolLoader:
@@ -62,5 +58,5 @@ class TestToolLoader:
         defn = defs[0]
         assert defn.name == "function_tool"
         assert defn.type == "function"
-        assert defn.proto_input is not None
-        assert defn.proto_output is not None
+        assert defn.input_schema is not None
+        assert defn.output_schema is not None

@@ -2,13 +2,20 @@
 Function logic for ``score_function``.
 
 Framework contract: FunctionHandler imports this module, finds ``run`` and
-awaits it. ``inputs`` merges the validated request proto with the static
+awaits it. ``tool_context`` carries session metadata (session_id, user_id,
+event_type, timestamp). ``inputs`` merges the validated request with the static
 ``parameters`` map from tool.yaml.
 """
+
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 
-async def run(inputs: dict) -> dict:
+if TYPE_CHECKING:
+    from agent_tools.core.tool_context import ToolContext
+
+
+async def run(tool_context: ToolContext, inputs: dict) -> dict:
     email = inputs.get("email", "")
     company = inputs.get("company", "")
     spend = int(inputs.get("annual_spend", 0) or 0)
@@ -32,9 +39,9 @@ async def run(inputs: dict) -> dict:
     tier = "A" if score >= 0.8 else "B" if score >= 0.6 else "C"
 
     return {
-        "email":           email,
-        "score":           score,
-        "tier":            tier,
-        "model_version":   model_version,
+        "email": email,
+        "score": score,
+        "tier": tier,
+        "model_version": model_version,
         "above_threshold": score >= threshold,
     }
