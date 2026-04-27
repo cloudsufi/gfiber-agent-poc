@@ -2,7 +2,7 @@
 agent_tools
 ===========
 
-Proto-first, config-driven tool framework for ADK agents.
+config-driven tool framework for ADK agents.
 
 On first import every tool in ``AGENT_TOOLS_DIR`` is loaded, config-validated,
 and exposed as a top-level name::
@@ -38,9 +38,28 @@ for _name in runtime._registry.names:
     globals()[_name] = _fn
     _tool_functions[_name] = _fn
 
+
+def discover_tools() -> list[ToolFunction]:
+    """Discover and return all registered tools.
+
+    Returns:
+        List of all registered ToolFunction objects.
+
+    Example::
+
+        from agent_tools import discover_tools
+
+        all_tools = discover_tools()
+        for tool in all_tools:
+            print(tool.name)
+    """
+    return list(_tool_functions.values())
+
+
 __all__: list[str] = [
     "runtime",
     "ToolContext",
+    "discover_tools",
     "with_request_headers",
     "current_request_headers",
 ] + list(_tool_functions.keys())

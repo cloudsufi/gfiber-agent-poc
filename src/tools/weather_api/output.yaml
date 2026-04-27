@@ -2,8 +2,7 @@
 # output validator rather than rejected.
 type: object
 properties:
-  url:     { type: string }
-  method:  { type: string }
-  args:    { type: object, additionalProperties: { type: string } }
-  headers: { type: object, additionalProperties: { type: string } }
-  origin:  { type: string }
+  userId: { type: number }
+  id: { type: number }
+  title:  { type: string }
+  completed:  { type: boolean }

@@ -1,0 +1,38 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+title: OpenAPIToolConfig
+description: Configuration for OpenAPI 3.x tools that execute a single named operation.
+type: object
+additionalProperties: false
+required: [operation_id]
+properties:
+  operation_id:
+    type: string
+    description: |
+      The operationId from the OpenAPI spec (e.g. 'getCustomerDetails').
+      Identifies which endpoint to execute.
+  server_url_env:
+    type: string
+    description: |
+      Optional env var name that overrides the server URL from spec["servers"][0].
+      Useful for dev/staging/prod switching without changing tool.yaml.
+  timeout_seconds:
+    type: integer
+    minimum: 0
+    description: HTTP request timeout in seconds.
+  max_retries:
+    type: integer
+    minimum: 0
+    description: Number of retry attempts on transient failures.
+  runtime_headers:
+    type: array
+    items:
+      type: string
+    description: |
+      Allow-list of header names that the agent code can override at call time
+      via _headers= or with_request_headers(). All other runtime headers are dropped.
+  auth:
+    type: object
+    additionalProperties: true
+    description: |
+      Authentication config. Supports bearer, api_key, oauth2, basic,
+      service_account, service_agent. See auth_config.yaml for full structure.

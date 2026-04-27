@@ -1,0 +1,7 @@
+type: object
+additionalProperties: false
+required: [accountId]
+properties:
+  accountId:
+    type: string
+    description: Unique customer account identifier

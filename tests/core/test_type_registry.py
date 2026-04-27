@@ -34,9 +34,9 @@ class TestToolTypeRegistry:
         assert "mine" in reg
         assert "other" not in reg
 
-    def test_default_registry_has_the_four_primary_types(self):
-        for expected in ("api", "mcp", "function", "cta"):
+    def test_default_registry_has_the_primary_types(self):
+        for expected in ("api", "mcp", "function", "cta", "openapi"):
             assert expected in default_type_registry
 
-    def test_default_registry_has_only_four_types(self):
-        assert default_type_registry.known_types() == ["api", "cta", "function", "mcp"]
+    def test_default_registry_has_five_types(self):
+        assert default_type_registry.known_types() == ["api", "cta", "function", "mcp", "openapi"]

@@ -1,0 +1,57 @@
+openapi: 3.0.0
+info:
+  title: Webhook Service Help Center API
+  version: 1.0.0
+  description: API to get customer information from the help center service.
+servers:
+  - url: {GFIBER_API_BASE_URL}
+
+paths:
+  /v1/help-center/customers/{accountId}:
+    get:
+      tags:
+        - HelpCenter
+      summary: Get customer details by accountId
+      operationId: getCustomerDetails
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique customer account identifier
+      responses:
+        "200":
+          description: Customer details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerDetails"
+        "404":
+          description: Customer not found
+        "500":
+          description: Internal server error
+
+components:
+  schemas:
+    CustomerDetails:
+      type: object
+      properties:
+        billingState:
+          type: string
+          description: Current billing state of the customer
+        suspensionStartTime:
+          type: string
+          description: When the account was suspended (ISO-8601 timestamp)
+        hasUpcomingAppointments:
+          type: boolean
+          description: Whether the customer has upcoming service appointments
+        hasSik:
+          type: boolean
+          description: Whether the customer is a SIK (Strategic Important Key) customer
+        accountState:
+          type: string
+          description: Overall account state (active, suspended, etc.)
+        isNpd:
+          type: boolean
+          description: Whether the customer is NPD (New Potential Development)

@@ -7,28 +7,12 @@ input_schema:  input.yaml
 output_schema: output.yaml
 
 config:
-  endpoint: "https://httpbin.org/anything"
+  endpoint: "https://jsonplaceholder.typicode.com/todos/{{id}}"
   method:   GET
-  params:
-    city:  "{{city}}"
-    units: "{{units}}"
 
   # Templated headers — filled at call time from the validated request / env
   headers:
     Accept:       application/json
-    X-Agent-Env:  "{{env:AGENT_ENV}}"     # from process env (optional — skipped if unset)
-    X-Trace-Id:   "{{trace_id}}"          # from request field
-
-  # Explicit opt-in: names below may also be supplied by the agent runtime
-  # via ``with_request_headers(...)`` or the ``_headers=`` kwarg. Any other
-  # header the agent injects is silently dropped.
-  runtime_headers:
-    - X-Trace-Id
-
-  # Bearer token sourced from env var (legacy shorthand still works)
-  auth:
-    bearer:
-      token_env: WEATHER_API_KEY
 
   timeout_seconds: 10
   max_retries:     1

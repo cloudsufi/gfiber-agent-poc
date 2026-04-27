@@ -1,4 +1,4 @@
-"""Default type registry — the four primary types are always present."""
+"""Default type registry — the primary types are always present."""
 
 from __future__ import annotations
 
@@ -18,12 +18,15 @@ class TestDefaultTypeRegistry:
     def test_cta_registered(self):
         assert "cta" in default_type_registry
 
-    def test_primary_four_all_present(self):
-        for name in ("api", "mcp", "function", "cta"):
+    def test_openapi_registered(self):
+        assert "openapi" in default_type_registry
+
+    def test_primary_types_all_present(self):
+        for name in ("api", "mcp", "function", "cta", "openapi"):
             entry = default_type_registry.get(name)
             assert entry.name == name
             assert entry.config_schema_path.exists()
             assert entry.handler_class is not None
 
-    def test_only_four_types_registered(self):
-        assert default_type_registry.known_types() == ["api", "cta", "function", "mcp"]
+    def test_five_types_registered(self):
+        assert default_type_registry.known_types() == ["api", "cta", "function", "mcp", "openapi"]

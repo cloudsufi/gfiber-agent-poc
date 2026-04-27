@@ -88,12 +88,14 @@ def _make_default_registry() -> ToolTypeRegistry:
     from agent_tools.handlers.cta_handler import CTAHandler
     from agent_tools.handlers.function_handler import FunctionHandler
     from agent_tools.handlers.mcp_handler import MCPHandler
+    from agent_tools.handlers.openapi_handler import OpenAPIHandler
 
     r = ToolTypeRegistry()
     r.register("api", _SCHEMAS / "api_tool_config.yaml", APIHandler)
     r.register("mcp", _SCHEMAS / "mcp_tool_config.yaml", MCPHandler)
     r.register("function", _SCHEMAS / "function_tool_config.yaml", FunctionHandler)
     r.register("cta", _SCHEMAS / "cta_tool_config.yaml", CTAHandler)
+    r.register("openapi", _SCHEMAS / "openapi_tool_config.yaml", OpenAPIHandler)
     return r
 
 

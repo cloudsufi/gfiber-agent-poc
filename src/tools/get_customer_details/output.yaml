@@ -1,0 +1,20 @@
+type: object
+properties:
+  billingState:
+    type: string
+    description: Current billing state of the customer
+  suspensionStartTime:
+    type: string
+    description: When the account was suspended
+  hasUpcomingAppointments:
+    type: boolean
+    description: Whether the customer has upcoming service appointments
+  hasSik:
+    type: boolean
+    description: Whether the customer is a SIK customer
+  accountState:
+    type: string
+    description: Overall account state
+  isNpd:
+    type: boolean
+    description: Whether the customer is NPD
