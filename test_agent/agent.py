@@ -1,28 +1,51 @@
 """
-Demo ADK agent that consumes tools from the ``agent_tools`` package.
+Interactive ADK agent with all registered tools.
 
-The agent is built from every tool registered by ``agent_tools`` at import
-time — no manual wiring. Each ``ToolFunction`` is wrapped in a thin
-:class:`AgentToolsAdapter` so ADK can discover its JSON-Schema declaration
-(derived from the tool's ``input.yaml``) and dispatch calls into the
-framework runtime.
+Serves a live Web UI via the ``adk web`` command. Every tool is discoverable
+and callable via natural language prompts. Session state, tool context, and
+structured logging flow through the framework seamlessly.
 
-AgentToolsAdapter also bridges ADK's tool_context into the framework's
-ToolContext, so session metadata (session_id, user_id, event_type) flows
-through to handlers and logging.
+Quick Start
+-----------
+1. Export your API keys:
+
+    export GOOGLE_API_KEY=<your-gemini-api-key>
+    export WEATHER_API_KEY=demo-bearer-token
+    export GFIBER_API_KEY=<optional-for-get_customer_details>
+    export GFIBER_API_BASE_URL=<optional-api-server-url>
+
+2. Start the web server:
+
+    adk web test_agent
+
+3. Open http://127.0.0.1:8000 in your browser and start chatting.
+
+Tip: Use the provided .env.example template:
+
+    cp test_agent/.env.example test_agent/.env
+    # edit .env with real keys
+    set -a && source test_agent/.env && set +a
+    adk web test_agent
 """
 from __future__ import annotations
 
 import hashlib
+import os
+import sys
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from agent_tools import ToolContext, weather_api  # triggers framework startup
+from agent_tools import ToolContext, discover_tools
 
-# ``weather_api`` is an arbitrary handle — every ToolFunction exposes the
-# same ``all_tools()`` / ``all_schemas()`` view over the shared registry.
-_ALL_TOOL_FUNCTIONS = weather_api.all_tools()
+_ALL_TOOL_FUNCTIONS = discover_tools()
+
+# Fail fast if Gemini API key is not set — prevents cryptic ADK error later
+if not os.environ.get("GOOGLE_API_KEY") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+    print(
+        "ERROR: Set GOOGLE_API_KEY (or GOOGLE_APPLICATION_CREDENTIALS) before running.",
+        file=sys.stderr,
+    )
 
 
 def build_agent():
@@ -104,3 +127,7 @@ class AgentToolsAdapter:
                 return await self._tool_fn(tc, **args)
 
         return _Adapter(tool_fn)
+
+
+# ADK discovers this module-level variable when running `adk web test_agent`
+root_agent = build_agent()
