@@ -1,0 +1,47 @@
+# ── OpenAPI tool example ───────────────────────────────────────────────────────
+# Maps to google.adk.tools.openapi_tool.OpenAPIToolset
+# All operations in openapi.yaml are exposed as individual ADK tools.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: weather_api
+version: "1.0"
+description: >
+  Fetch current weather and forecasts from the Open-Meteo API.
+  Exposes every operation defined in openapi.yaml as a separate ADK tool.
+
+config:
+  type: openapi
+  spec_file: openapi.yaml        # path relative to this tool directory
+  timeout_seconds: 15
+
+  # Auth is optional — Open-Meteo is public; uncomment to add bearer auth.
+  # auth:
+  #   type: bearer
+  #   token_env: WEATHER_API_TOKEN   # export WEATHER_API_TOKEN=<your-token>
+
+  # Other supported auth types:
+  #
+  # API key in header:
+  #   auth:
+  #     type: api_key
+  #     key_env: WEATHER_API_KEY
+  #     header_name: X-API-Key
+  #     location: header          # header | query | cookie
+  #
+  # GCP service account (mints an access token):
+  #   auth:
+  #     type: service_account
+  #     key_env: GCP_SA_KEY_JSON  # env var with raw SA JSON or a file path
+  #     scopes:
+  #       - https://www.googleapis.com/auth/cloud-platform
+  #
+  # OAuth2 client-credentials:
+  #   auth:
+  #     type: oauth2
+  #     client_id_env: OAUTH_CLIENT_ID
+  #     client_secret_env: OAUTH_CLIENT_SECRET
+  #     token_url: https://auth.example.com/token
+  #     scope: read:weather
+
+input_schema:  input.yaml
+output_schema: output.yaml

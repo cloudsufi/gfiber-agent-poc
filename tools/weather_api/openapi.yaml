@@ -1,0 +1,105 @@
+openapi: "3.0.3"
+info:
+  title: Open-Meteo Weather API
+  version: "1.0"
+  description: Free weather API providing current conditions and forecasts.
+
+servers:
+  - url: https://api.open-meteo.com/v1
+
+paths:
+  /forecast:
+    get:
+      operationId: getWeatherForecast
+      summary: Get weather forecast for a location
+      description: >
+        Returns hourly or daily weather forecast for the given latitude/longitude.
+        Supports temperature, wind speed, precipitation, and more.
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -90
+            maximum: 90
+          description: Geographic latitude of the location (-90 to 90)
+        - name: longitude
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: -180
+            maximum: 180
+          description: Geographic longitude of the location (-180 to 180)
+        - name: current
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            Comma-separated list of current weather variables to return.
+            E.g. "temperature_2m,wind_speed_10m,precipitation"
+        - name: hourly
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of hourly variables. E.g. "temperature_2m"
+        - name: temperature_unit
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [celsius, fahrenheit]
+            default: celsius
+        - name: wind_speed_unit
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [kmh, ms, mph, kn]
+            default: kmh
+        - name: timezone
+          in: query
+          required: false
+          schema:
+            type: string
+            default: UTC
+          description: Timezone for time values. E.g. "America/New_York", "auto"
+        - name: forecast_days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 16
+            default: 7
+          description: Number of forecast days (1–16)
+      responses:
+        "200":
+          description: Successful weather data response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  latitude:
+                    type: number
+                  longitude:
+                    type: number
+                  timezone:
+                    type: string
+                  current:
+                    type: object
+                    additionalProperties: true
+                  hourly:
+                    type: object
+                    additionalProperties: true
+                  daily:
+                    type: object
+                    additionalProperties: true
+        "400":
+          description: Bad request — invalid parameters

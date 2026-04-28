@@ -1,0 +1,22 @@
+# Output schema for score_function tool.
+$schema: "http://json-schema.org/draft-07/schema#"
+title: ScoreFunctionOutput
+type: object
+required: [tier, score, rationale]
+additionalProperties: false
+properties:
+  tier:
+    type: string
+    enum: [high, medium, low]
+    description: Lead priority tier
+  score:
+    type: number
+    minimum: 0
+    maximum: 1
+    description: Numeric confidence score (0.0–1.0)
+  model_version:
+    type: string
+    description: Scoring model version used
+  rationale:
+    type: string
+    description: Human-readable explanation of the score

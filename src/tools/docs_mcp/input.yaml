@@ -1,7 +1,0 @@
-type: object
-additionalProperties: false
-required: [query, top_k, filter_tag]
-properties:
-  query:      { type: string }
-  top_k:      { type: integer, minimum: 1, maximum: 50 }
-  filter_tag: { type: string }

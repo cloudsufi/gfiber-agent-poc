@@ -1,7 +1,0 @@
-type: object
-additionalProperties: false
-required: [city, units, trace_id]
-properties:
-  city:     { type: string }
-  units:    { type: string, enum: [metric, imperial] }
-  trace_id: { type: string }

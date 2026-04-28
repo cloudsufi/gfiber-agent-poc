@@ -1,0 +1,24 @@
+# Output schema for docs_mcp tool.
+$schema: "http://json-schema.org/draft-07/schema#"
+title: DocsMCPOutput
+type: object
+properties:
+  results:
+    type: array
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+      additionalProperties: true
+  total:
+    type: integer
+additionalProperties: true

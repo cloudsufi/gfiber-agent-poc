@@ -1,0 +1,21 @@
+# Input schema for docs_mcp tool — documents the expected query shape.
+# The actual schema is enforced by the MCP server; this is for reference.
+$schema: "http://json-schema.org/draft-07/schema#"
+title: DocsMCPInput
+type: object
+required: [query]
+additionalProperties: false
+properties:
+  query:
+    type: string
+    minLength: 1
+    description: Search query or document identifier
+  max_results:
+    type: integer
+    minimum: 1
+    maximum: 50
+    default: 5
+    description: Maximum number of results to return
+  section:
+    type: string
+    description: Restrict search to this documentation section (optional)

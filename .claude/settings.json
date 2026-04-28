@@ -8,7 +8,28 @@
       "Bash(pytest tests *)",
       "Bash(python test_agent/demo.py)",
       "Bash(ruff format *)",
-      "Bash(make check *)"
+      "Bash(make check *)",
+      "Bash(pytest tests/handlers/test_openapi.py -v --tb=short)",
+      "Bash(python -c \"from agent_tools import discover_tools; tools = discover_tools\\(\\); print\\(f'Discovered {len\\(tools\\)} tools:'\\); [print\\(f'  - {t.name}'\\) for t in tools]\")",
+      "Bash(python -c \"from agent_tools import discover_tools; tools = discover_tools\\(\\); print\\(f'Discovered {len\\(tools\\)} tools:'\\); [print\\(f'  - {t.schema[\\\\\"name\\\\\"]}'\\) for t in tools]\")",
+      "Bash(python -c \"from test_agent.agent import _ALL_TOOL_FUNCTIONS; print\\(f'Agent has {len\\(_ALL_TOOL_FUNCTIONS\\)} tools:'\\); [print\\(f'  - {t.schema[\\\\\"name\\\\\"]}'\\) for t in _ALL_TOOL_FUNCTIONS]\")",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(python test_agent/import_examples.py)",
+      "Bash(python -c \"from test_agent.agent import build_agent, _ALL_TOOL_FUNCTIONS, get_tools_by_category; print\\(f'Default agent tools: {len\\(_ALL_TOOL_FUNCTIONS\\)}'\\); filtered = get_tools_by_category\\('weather|score'\\); print\\(f'Filtered \\(weather|score\\): {len\\(filtered\\)}'\\); [print\\(f'  - {t.schema[\\\\\"name\\\\\"]}'\\) for t in filtered]\")",
+      "Bash(python -c \"from test_agent.agent import _ALL_TOOL_FUNCTIONS, build_agent; print\\(f'Tools: {len\\(_ALL_TOOL_FUNCTIONS\\)}'\\); [print\\(f'  - {t.schema[\\\\\"name\\\\\"]}'\\) for t in _ALL_TOOL_FUNCTIONS]\")",
+      "Bash(pip show *)",
+      "Bash(adk --help)",
+      "Bash(adk web *)",
+      "Bash(python -c \"from test_agent.agent import root_agent; print\\(f'✅ root_agent created: {root_agent.name}'\\); print\\(f'✅ Tools available: {len\\(root_agent.tools\\)}'\\)\")",
+      "Read(//Users/sumitsharma/.pyenv/versions/3.13.0/lib/python3.13/site-packages/google/adk/tools/**)",
+      "Read(//Users/sumitsharma/.pyenv/versions/3.13.0/lib/python3.13/site-packages/google/adk/**)",
+      "Bash(python3 -c \"from google.adk.tools.openapi_tool import OpenAPIToolset, RestApiTool; print\\('OK'\\)\")",
+      "Bash(python3 -c \"from google.adk.tools.openapi_tool.auth.auth_helpers import token_to_scheme_credential, service_account_dict_to_scheme_credential; print\\('OK'\\)\")",
+      "Bash(python3 -c \"from google.adk.auth import AuthCredential, AuthCredentialTypes; print\\(list\\(AuthCredentialTypes\\)\\)\")",
+      "Bash(python -m pytest tests/handlers/test_openapi.py -xvs)",
+      "Bash(python3 -c \"from google.adk.tools.openapi_tool import RestApiTool; import inspect; print\\(inspect.signature\\(RestApiTool.call\\)\\)\")",
+      "Bash(python -m pytest tests/handlers/test_openapi.py::TestOpenAPIHandler::test_routes_path_param_correctly -xvs)",
+      "Bash(python -m pytest tests/handlers/test_openapi.py -q)"
     ]
   }
 }

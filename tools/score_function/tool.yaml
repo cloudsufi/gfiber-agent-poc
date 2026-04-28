@@ -1,0 +1,23 @@
+# ── Function tool example ─────────────────────────────────────────────────────
+# Maps to google.adk.tools.FunctionTool
+# Wraps an async function from logic.py.  No external calls.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: score_function
+version: "1.0"
+description: >
+  Score a sales lead using local business rules and return a
+  priority tier (high / medium / low) with a numeric confidence score.
+
+config:
+  type: function
+
+  # Static keyword arguments merged into every invocation.
+  # These never appear in the LLM-facing tool schema — they are injected
+  # server-side before the function is called.
+  parameters:
+    model_version: "v2.3"
+    threshold: "0.60"
+
+input_schema:  input.yaml
+output_schema: output.yaml

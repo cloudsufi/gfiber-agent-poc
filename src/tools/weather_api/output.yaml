@@ -1,9 +1,0 @@
-# Subset of httpbin.org/anything — unknown fields are dropped by the
-# output validator rather than rejected.
-type: object
-properties:
-  url:     { type: string }
-  method:  { type: string }
-  args:    { type: object, additionalProperties: { type: string } }
-  headers: { type: object, additionalProperties: { type: string } }
-  origin:  { type: string }
