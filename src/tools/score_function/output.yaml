@@ -1,9 +1,0 @@
-type: object
-additionalProperties: false
-required: [email, score, tier, model_version, above_threshold]
-properties:
-  email:           { type: string }
-  score:           { type: number, minimum: 0, maximum: 1 }
-  tier:            { type: string, enum: [A, B, C] }
-  model_version:   { type: string }
-  above_threshold: { type: boolean }

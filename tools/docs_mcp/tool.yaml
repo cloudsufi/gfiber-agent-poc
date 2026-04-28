@@ -1,0 +1,54 @@
+# ── MCP tool example ──────────────────────────────────────────────────────────
+# Maps to google.adk.tools.mcp_tool.MCPToolset (SSE transport).
+# Requires load_tools_async() — MCP handshake is async.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: docs_mcp
+version: "1.0"
+description: >
+  Search and retrieve internal documentation via an MCP server.
+  Exposes the tools advertised by the server (filtered by tool_filter).
+
+config:
+  type: mcp
+
+  # ── SSE transport (HTTP-based) ─────────────────────────────────────────────
+  server_url: https://mcp.example.internal/sse   # replace with your MCP server URL
+
+  # ── Stdio transport (subprocess) — uncomment to use instead of server_url ──
+  # command: python
+  # args: [-m, my_mcp_docs_server]
+  # env_vars:
+  #   LOG_LEVEL: info
+  #   DOCS_ROOT: /data/docs
+
+  # Only expose these tool names from the server; empty list = expose all.
+  tool_filter:
+    - search_documents
+    - get_document
+    - list_sections
+
+  # Auth for SSE transport — injected as HTTP headers.
+  auth:
+    type: bearer
+    token_env: MCP_DOCS_TOKEN    # export MCP_DOCS_TOKEN=<your-token>
+
+  # Other auth options for MCP:
+  #
+  # API key:
+  #   auth:
+  #     type: api_key
+  #     key_env: MCP_API_KEY
+  #     header_name: X-API-Key
+  #
+  # OAuth2 (fetches client-credentials token):
+  #   auth:
+  #     type: oauth2
+  #     client_id_env: OAUTH_CLIENT_ID
+  #     client_secret_env: OAUTH_CLIENT_SECRET
+  #     token_url: https://auth.example.com/token
+
+  timeout_seconds: 30
+
+input_schema:  input.yaml
+output_schema: output.yaml

@@ -20,7 +20,16 @@
       "Bash(pip show *)",
       "Bash(adk --help)",
       "Bash(adk web *)",
-      "Bash(python -c \"from test_agent.agent import root_agent; print\\(f'✅ root_agent created: {root_agent.name}'\\); print\\(f'✅ Tools available: {len\\(root_agent.tools\\)}'\\)\")"
+      "Bash(python -c \"from test_agent.agent import root_agent; print\\(f'✅ root_agent created: {root_agent.name}'\\); print\\(f'✅ Tools available: {len\\(root_agent.tools\\)}'\\)\")",
+      "Read(//Users/sumitsharma/.pyenv/versions/3.13.0/lib/python3.13/site-packages/google/adk/tools/**)",
+      "Read(//Users/sumitsharma/.pyenv/versions/3.13.0/lib/python3.13/site-packages/google/adk/**)",
+      "Bash(python3 -c \"from google.adk.tools.openapi_tool import OpenAPIToolset, RestApiTool; print\\('OK'\\)\")",
+      "Bash(python3 -c \"from google.adk.tools.openapi_tool.auth.auth_helpers import token_to_scheme_credential, service_account_dict_to_scheme_credential; print\\('OK'\\)\")",
+      "Bash(python3 -c \"from google.adk.auth import AuthCredential, AuthCredentialTypes; print\\(list\\(AuthCredentialTypes\\)\\)\")",
+      "Bash(python -m pytest tests/handlers/test_openapi.py -xvs)",
+      "Bash(python3 -c \"from google.adk.tools.openapi_tool import RestApiTool; import inspect; print\\(inspect.signature\\(RestApiTool.call\\)\\)\")",
+      "Bash(python -m pytest tests/handlers/test_openapi.py::TestOpenAPIHandler::test_routes_path_param_correctly -xvs)",
+      "Bash(python -m pytest tests/handlers/test_openapi.py -q)"
     ]
   }
 }

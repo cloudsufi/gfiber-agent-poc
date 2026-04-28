@@ -1,0 +1,25 @@
+# Input schema for score_function tool.
+# ADK derives the tool schema from logic.py type hints — this file is for
+# documentation and optional pre-call validation.
+$schema: "http://json-schema.org/draft-07/schema#"
+title: ScoreFunctionInput
+type: object
+required: [company_size, industry]
+additionalProperties: false
+properties:
+  company_size:
+    type: string
+    enum: [startup, smb, mid-market, enterprise]
+    description: Company size category
+  industry:
+    type: string
+    description: Industry vertical (e.g. saas, fintech, healthcare)
+  annual_revenue_usd:
+    type: integer
+    minimum: 0
+    default: 0
+    description: Estimated annual revenue in USD; 0 if unknown
+  has_existing_contract:
+    type: boolean
+    default: false
+    description: Whether the lead has an active contract with us

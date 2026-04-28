@@ -1,0 +1,26 @@
+# Output schema for weather_api tool.
+$schema: "http://json-schema.org/draft-07/schema#"
+title: WeatherForecastOutput
+type: object
+properties:
+  latitude:
+    type: number
+  longitude:
+    type: number
+  timezone:
+    type: string
+  elevation:
+    type: number
+  current:
+    type: object
+    description: Current weather values keyed by variable name
+    additionalProperties: true
+  hourly:
+    type: object
+    description: Hourly time-series keyed by variable name
+    additionalProperties: true
+  daily:
+    type: object
+    description: Daily aggregates keyed by variable name
+    additionalProperties: true
+additionalProperties: true

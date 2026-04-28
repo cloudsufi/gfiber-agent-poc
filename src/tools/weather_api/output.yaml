@@ -1,8 +1,0 @@
-# Subset of httpbin.org/anything — unknown fields are dropped by the
-# output validator rather than rejected.
-type: object
-properties:
-  userId: { type: number }
-  id: { type: number }
-  title:  { type: string }
-  completed:  { type: boolean }

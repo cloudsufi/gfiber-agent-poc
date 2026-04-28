@@ -1,133 +1,124 @@
 """
-Interactive ADK agent with all registered tools.
+Demo ADK agent powered by adk-tools.
 
-Serves a live Web UI via the ``adk web`` command. Every tool is discoverable
-and callable via natural language prompts. Session state, tool context, and
-structured logging flow through the framework seamlessly.
+────────────────────────────────────────────────────────────────────
+Quick start
+────────────────────────────────────────────────────────────────────
+1.  Install the package (editable, from repo root):
 
-Quick Start
------------
-1. Export your API keys:
+        pip install -e ".[all]"
 
-    export GOOGLE_API_KEY=<your-gemini-api-key>
-    export WEATHER_API_KEY=demo-bearer-token
-    export GFIBER_API_KEY=<optional-for-get_customer_details>
-    export GFIBER_API_BASE_URL=<optional-api-server-url>
+2.  Copy the env template and fill in your keys:
 
-2. Start the web server:
+        cp test_agent/.env.example test_agent/.env
 
-    adk web test_agent
+3.  Load env vars and launch the ADK web UI:
 
-3. Open http://127.0.0.1:8000 in your browser and start chatting.
+        set -a && source test_agent/.env && set +a
+        adk web test_agent
 
-Tip: Use the provided .env.example template:
+4.  Open http://127.0.0.1:8000 and start chatting.
 
-    cp test_agent/.env.example test_agent/.env
-    # edit .env with real keys
-    set -a && source test_agent/.env && set +a
-    adk web test_agent
+────────────────────────────────────────────────────────────────────
+How tools are loaded
+────────────────────────────────────────────────────────────────────
+``adk_tools`` scans the directory pointed to by ``ADK_TOOLS_DIR``
+(set in .env) at import time and exposes every tool as a module-level
+name.  The three lines below show all available import styles:
+
+    # Style A — all tools at once (recommended for most agents)
+    from adk_tools import discover_tools
+    tools = discover_tools()
+
+    # Style B — pick individual tools by name
+    from adk_tools import score_function, get_weather_forecast
+    tools = [score_function, get_weather_forecast]
+
+    # Style C — load from a custom directory explicitly
+    from adk_tools import load_tools
+    tools = load_tools("/path/to/my/tools")
+
+This file uses Style A.  Scroll to the bottom to switch styles.
+
+────────────────────────────────────────────────────────────────────
+Adding your own tools
+────────────────────────────────────────────────────────────────────
+Option 1 — YAML + logic.py in tools/:
+    Create tools/<my_tool>/tool.yaml and tools/<my_tool>/logic.py.
+    The tool appears automatically on next startup.
+
+Option 2 — @function_tool decorator:
+    # my_tools.py  (anywhere in your project)
+    from adk_tools import function_tool
+    from google.adk.tools.tool_context import ToolContext
+
+    @function_tool
+    async def greet_user(name: str, tool_context: ToolContext) -> str:
+        \"\"\"Greet a user.\"\"\"
+        return f"Hello {name}!"
+
+    # agent.py — import the module so decorators register, then call discover_tools()
+    import my_tools
+    from adk_tools import discover_tools
+    tools = discover_tools()   # includes greet_user
 """
+
 from __future__ import annotations
 
-import hashlib
 import os
 import sys
-from datetime import datetime, timezone
-from typing import Any
-from uuid import uuid4
 
-from agent_tools import ToolContext, discover_tools
-
-_ALL_TOOL_FUNCTIONS = discover_tools()
-
-# Fail fast if Gemini API key is not set — prevents cryptic ADK error later
-if not os.environ.get("GOOGLE_API_KEY") and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+# ── Pre-flight checks ─────────────────────────────────────────────────────────
+if not os.environ.get("GOOGLE_API_KEY") and \
+   not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
     print(
-        "ERROR: Set GOOGLE_API_KEY (or GOOGLE_APPLICATION_CREDENTIALS) before running.",
+        "ERROR: GOOGLE_API_KEY (or GOOGLE_APPLICATION_CREDENTIALS) is not set.\n"
+        "       Copy test_agent/.env.example → test_agent/.env and fill in your key.",
         file=sys.stderr,
     )
+    # Don't sys.exit — allow `adk web` to still serve an error page.
 
+# ── Tool imports ──────────────────────────────────────────────────────────────
+#
+# Style A (default): discover all tools from ADK_TOOLS_DIR at once.
+# Switch to Style B to cherry-pick specific tools by name.
+#
+from adk_tools import discover_tools  # noqa: E402
+
+# ── (Optional) register @function_tool functions ─────────────────────────────
+# Uncomment and point at your extra-tools module.
+# import my_tools   # noqa: F401 — import triggers @function_tool registrations
+
+# ── Build the agent ───────────────────────────────────────────────────────────
 
 def build_agent():
-    """Build a ``google.adk.agents.LlmAgent`` wired to every registered tool."""
-    from google.adk.agents import LlmAgent
+    """
+    Construct and return the ``google.adk.agents.LlmAgent``.
 
-    tools = [AgentToolsAdapter(tf) for tf in _ALL_TOOL_FUNCTIONS]
+    Swap ``discover_tools()`` for a list of specific tools if you want a focused
+    agent::
+
+        from adk_tools import score_function, get_weather_forecast
+        tools = [score_function, get_weather_forecast]
+    """
+    from google.adk.agents import LlmAgent  # type: ignore[import]
 
     return LlmAgent(
-        model="gemini-2.0-flash",
+        model=os.environ.get("AGENT_MODEL", "gemini-2.0-flash"),
         name="demo_agent",
         description=(
-            "Demo agent showcasing the ai-agent-shared-tools framework. "
-            "Has access to every tool registered by the package at startup."
+            "Demo agent powered by adk-tools. "
+            "Has access to every tool registered in ADK_TOOLS_DIR."
         ),
         instruction=(
-            "You are a helpful assistant. Use the available tools to answer "
-            "questions about customer billing and to enrich lead information. "
-            "Always cite which tool you used."
+            "You are a helpful assistant. "
+            "Use the available tools to answer user requests. "
+            "Always tell the user which tool you called and summarise the result clearly."
         ),
-        tools=tools,
+        tools=discover_tools(),
     )
 
 
-class AgentToolsAdapter:
-    """
-    Wraps a framework :class:`ToolFunction` so it satisfies the ADK
-    :class:`~google.adk.tools.BaseTool` contract without pulling the ADK import
-    into framework code.
-
-    ``BaseTool`` is imported lazily so this module still loads on machines
-    that don't have ``google-adk`` installed.
-    """
-
-    def __new__(cls, tool_fn):  # type: ignore[no-untyped-def]
-        # Build the subclass lazily at first instantiation so BaseTool is only
-        # imported when ADK is actually needed.
-        from google.adk.tools import BaseTool
-        from google.genai import types
-
-        class _Adapter(BaseTool):
-            def __init__(self, tf) -> None:
-                super().__init__(
-                    name=tf.schema["name"],
-                    description=tf.schema.get("description", ""),
-                )
-                self._tool_fn = tf
-
-            def _get_declaration(self):
-                return types.FunctionDeclaration.model_validate(
-                    {
-                        "name": self._tool_fn.schema["name"],
-                        "description": self._tool_fn.schema.get("description", ""),
-                        "parameters": self._tool_fn.schema.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
-                    }
-                )
-
-            async def run_async(self, *, args: dict[str, Any], tool_context) -> Any:
-                # Bridge ADK's tool_context into framework's ToolContext
-                uid = ""
-                if tool_context and hasattr(tool_context, "state"):
-                    uid = tool_context.state.get("user_id", "") if tool_context.state else ""
-                hashed = hashlib.sha256(uid.encode()).hexdigest() if uid else ""
-
-                session_id = ""
-                if tool_context and hasattr(tool_context, "state"):
-                    session_id = tool_context.state.get("session_id", str(uuid4())) if tool_context.state else str(uuid4())
-                else:
-                    session_id = str(uuid4())
-
-                tc = ToolContext(
-                    session_id=session_id,
-                    hashed_user_id=hashed,
-                    event_type=tool_context.state.get("event_type", "adk_tool_call") if (tool_context and hasattr(tool_context, "state") and tool_context.state) else "adk_tool_call",
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                )
-                return await self._tool_fn(tc, **args)
-
-        return _Adapter(tool_fn)
-
-
-# ADK discovers this module-level variable when running `adk web test_agent`
+# ── ADK entrypoint ────────────────────────────────────────────────────────────
+# ``adk web test_agent`` discovers this module-level variable automatically.
 root_agent = build_agent()
